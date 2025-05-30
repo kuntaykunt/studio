@@ -14,8 +14,11 @@ import { getStorybookById } from '@/lib/firebase/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
 
-const PLACEHOLDER_VOICEOVER_URI = 'data:audio/wav;base64,placeholder-audio-data';
 const PLACEHOLDER_ANIMATION_URI = 'data:image/gif;base64,placeholder-animation-data';
+const PLACEHOLDER_AUDIO_PREFIXES = [
+    'data:audio/wav;base64,placeholder-audio', // Covers various error states from generation
+    'data:audio/mp3;base64,placeholder-audio' // In case mp3 placeholders are used
+];
 
 
 export default function ViewStorybookPage() {
@@ -135,84 +138,89 @@ export default function ViewStorybookPage() {
 
       {storybook.pages.length > 0 ? (
         <div className="space-y-10">
-          {storybook.pages.map((page) => (
-            <Card key={page.pageNumber} className="shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl">
-              <CardHeader className="bg-secondary/30">
-                <CardTitle className="text-2xl text-secondary-foreground">Page {page.pageNumber}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 grid md:grid-cols-2 gap-6 items-start">
-                <div>
-                  <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text (Original):</h3>
-                  <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
-                  {page.transformedDialogue && (
-                    <details className="mt-3 text-sm">
-                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Dialogue Script for Voiceover</summary>
-                        <pre className="mt-1 p-2 bg-muted/50 rounded-md whitespace-pre-wrap border text-xs text-foreground/70 max-h-48 overflow-y-auto">{page.transformedDialogue}</pre>
-                    </details>
-                  )}
-                </div>
-                <div className="space-y-6"> 
-                  {page.imageUrl && (
-                    <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
-                      <Image
-                        src={page.imageUrl}
-                        alt={`Illustration for page ${page.pageNumber}`}
-                        width={400}
-                        height={300}
-                        className="rounded-lg border shadow-md object-cover"
-                        data-ai-hint={page.dataAiHint || "story illustration"}
-                      />
-                      {!page.imageMatchesText && (
-                        <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged this image as potentially not matching the text.</p>
-                      )}
-                    </div>
-                  )}
-                  {page.voiceoverUrl && (
-                     <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
-                       {(page.voiceoverUrl.includes(PLACEHOLDER_VOICEOVER_URI) || page.voiceoverUrl.includes('placeholder-audio-generation')) ? (
-                         <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
-                            <div className="flex items-center text-primary mb-1">
-                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                               <span>Processing voiceover...</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                We&apos;ll notify you when it&apos;s ready! (Actual voice generation is a feature in development)
-                            </p>
-                         </div>
-                       ) : (
-                         <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">
-                            Your browser does not support the audio element.
-                         </audio>
-                       )}
-                    </div>
-                  )}
-                   {page.animationUrl && page.imageUrl && ( 
-                    <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
-                       {page.animationUrl === PLACEHOLDER_ANIMATION_URI ? (
-                         <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
-                            <div className="flex items-center text-primary mb-1">
-                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                               <span>Processing animation...</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                We&apos;ll notify you when it&apos;s ready! (Actual animation generation is a feature in development)
-                            </p>
-                         </div>
-                       ) : (
-                         <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
-                             <Film className="h-12 w-12" />
-                             <span className="ml-2">Animation Content</span> 
-                         </div>
-                       )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {storybook.pages.map((page) => {
+            const isPlaceholderAudio = !page.voiceoverUrl || PLACEHOLDER_AUDIO_PREFIXES.some(prefix => page.voiceoverUrl!.startsWith(prefix));
+            const isPlaceholderAnimation = !page.animationUrl || page.animationUrl === PLACEHOLDER_ANIMATION_URI;
+
+            return (
+              <Card key={page.pageNumber} className="shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl">
+                <CardHeader className="bg-secondary/30">
+                  <CardTitle className="text-2xl text-secondary-foreground">Page {page.pageNumber}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 grid md:grid-cols-2 gap-6 items-start">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text (Original):</h3>
+                    <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
+                    {page.transformedDialogue && (
+                      <details className="mt-3 text-sm">
+                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Dialogue Script Used for TTS</summary>
+                          <pre className="mt-1 p-2 bg-muted/50 rounded-md whitespace-pre-wrap border text-xs text-foreground/70 max-h-48 overflow-y-auto">{page.transformedDialogue}</pre>
+                      </details>
+                    )}
+                  </div>
+                  <div className="space-y-6"> 
+                    {page.imageUrl && (
+                      <div>
+                         <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
+                        <Image
+                          src={page.imageUrl}
+                          alt={`Illustration for page ${page.pageNumber}`}
+                          width={400}
+                          height={300}
+                          className="rounded-lg border shadow-md object-cover"
+                          data-ai-hint={page.dataAiHint || "story illustration"}
+                        />
+                        {!page.imageMatchesText && (
+                          <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged this image as potentially not matching the text.</p>
+                        )}
+                      </div>
+                    )}
+                    {page.voiceoverUrl && (
+                       <div>
+                         <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
+                         {isPlaceholderAudio ? (
+                           <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                              <div className="flex items-center text-primary mb-1">
+                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                 <span>Processing voiceover...</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                  We&apos;ll notify you when it&apos;s ready! (Actual voice generation is a feature in development)
+                              </p>
+                           </div>
+                         ) : (
+                           <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">
+                              Your browser does not support the audio element.
+                           </audio>
+                         )}
+                      </div>
+                    )}
+                     {page.animationUrl && page.imageUrl && ( 
+                      <div>
+                         <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
+                         {isPlaceholderAnimation ? (
+                           <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                              <div className="flex items-center text-primary mb-1">
+                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                 <span>Processing animation...</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                  We&apos;ll notify you when it&apos;s ready! (Actual animation generation is a feature in development)
+                              </p>
+                           </div>
+                         ) : (
+                           <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
+                               <Film className="h-12 w-12" />
+                               <span className="ml-2">Animation Content</span> 
+                           </div>
+                         )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       ) : (
         <Card className="text-center py-10">
@@ -231,3 +239,4 @@ export default function ViewStorybookPage() {
     </div>
   );
 }
+

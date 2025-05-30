@@ -78,10 +78,11 @@ ${dialogueScript}`;
         },
       });
 
-      if (media?.url) {
+      // More stringent check for a valid media URL
+      if (media?.url && media.url.trim() !== '' && media.url.startsWith('data:audio')) {
         return { audioDataUri: media.url, transformedDialogue: dialogueScript };
       } else {
-        console.warn('TTS generation via ai.generate() did not return a media URL. Text response (if any):', text);
+        console.warn('TTS generation via ai.generate() did not return a valid media URL. media.url:', media?.url, 'Text response (if any):', text);
         return { 
             audioDataUri: 'data:audio/wav;base64,placeholder-audio-generation-failed-no-url',
             transformedDialogue: dialogueScript 
