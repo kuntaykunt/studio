@@ -6,15 +6,19 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { SignupFormData, signupSchema } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import type { FirebaseError } from 'firebase/app';
 
 export default function SignupForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const { signup } = useAuth();
+  const router = useRouter();
 
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
@@ -28,15 +32,32 @@ export default function SignupForm() {
 
   async function onSubmit(data: SignupFormData) {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    console.log('Signup data:', data);
-    toast({
-      title: "Signup Submitted (UI Only)",
-      description: "Signup functionality is for demonstration. No actual account created.",
-    });
-     // router.push('/storybooks'); // Redirect after successful signup
+    try {
+      await signup(data);
+      toast({
+        title: "Signup Successful!",
+        description: "Your account has been created. Welcome to StoryTime Studio!",
+      });
+      router.push('/storybooks'); // Redirect after successful signup
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
+      let errorMessage = "An unexpected error occurred during signup.";
+      if (firebaseError.code === 'auth/email-already-in-use') {
+        errorMessage = "This email is already registered. Try logging in.";
+      } else if (firebaseError.code === 'auth/weak-password') {
+        errorMessage = "The password is too weak. Please choose a stronger password.";
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        errorMessage = "The email address is not valid.";
+      }
+      console.error('Signup error:', firebaseError);
+      toast({
+        variant: "destructive",
+        title: "Signup Failed",
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (

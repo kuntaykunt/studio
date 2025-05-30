@@ -6,17 +6,19 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { LoginFormData, loginSchema } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import type { FirebaseError } from 'firebase/app';
 
 export default function LoginForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { login } = useAuth();
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -28,18 +30,30 @@ export default function LoginForm() {
 
   async function onSubmit(data: LoginFormData) {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    console.log('Login data:', data);
-    toast({
-      title: "Login Submitted (UI Only)",
-      description: "Login functionality is for demonstration. Redirecting to storybooks...",
-    });
-    // In a real app, upon successful login, you would set the auth state globally
-    // and then redirect. For now, this just redirects. The header's auth state
-    // won't update automatically from this action without shared state management.
-    router.push('/storybooks'); 
+    try {
+      await login(data);
+      toast({
+        title: "Login Successful!",
+        description: "Welcome back! Redirecting to your storybooks...",
+      });
+      router.push('/storybooks'); 
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
+      let errorMessage = "An unexpected error occurred during login.";
+      if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
+        errorMessage = "Invalid email or password. Please try again.";
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        errorMessage = "The email address is not valid.";
+      }
+      console.error('Login error:', firebaseError);
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
