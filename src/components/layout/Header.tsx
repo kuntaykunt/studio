@@ -5,12 +5,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { BookHeart, Home, Library, LogIn, UserPlus, LogOut, Loader2 } from 'lucide-react';
+import { BookHeart, Library, LogIn, UserPlus, LogOut, Loader2 } from 'lucide-react'; // Removed Home icon as it's no longer explicitly used for a nav link
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 const mainNavLinks = [
-  // { href: '/', label: 'Home', icon: Home }, // Home link is now only the logo for unauthenticated users
   { href: '/storybooks', label: 'My Storybooks', icon: Library },
 ];
 
@@ -66,18 +65,7 @@ export default function Header() {
           StoryTime Studio
         </Link>
         <nav className="flex items-center gap-2 sm:gap-4">
-          {isAuthenticated && (
-            <Link
-              href="/"
-              className={cn(
-                "text-sm sm:text-base font-medium transition-colors hover:text-primary",
-                pathname === "/" ? "text-primary" : "text-foreground/70"
-              )}
-            >
-              <Home className="h-4 w-4 inline sm:hidden" />
-              <span className="hidden sm:inline">Home</span>
-            </Link>
-          )}
+          {/* Removed the explicit "Home" link for authenticated users */}
           {isAuthenticated && mainNavLinks.map((link) => (
             <Link
               key={link.href}
