@@ -11,8 +11,9 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { transformTextToDialogue, type DialogueTransformationInput } from './dialogue-transformation'; // Import the new flow
+import { transformTextToDialogue, type DialogueTransformationInput } from './dialogue-transformation'; 
 
+// Schemas are kept internal to this 'use server' file
 const GenerateVoiceoverInputSchema = z.object({
   storyText: z.string().describe('The original text for the story page voiceover.'),
   voiceGender: z.enum(['male', 'female']).describe('The gender of the voiceover.'),
@@ -49,11 +50,12 @@ const voiceGenerationFlow = ai.defineFlow(
     } catch (dialogueError) {
       console.error("Error transforming text to dialogue:", dialogueError);
       // Fallback: use original text with a Narrator prefix if transformation fails
-      dialogueScript = `Narrator: ${input.storyText}`;
+      dialogueScript = `Narrator: ${input.storyText}`; 
     }
     
     try {
-      // Step 2: Generate voiceover from the dialogue script
+      console.log(`Attempting TTS for dialogue (age: ${input.childAge}, gender: ${input.voiceGender}):\n"${dialogueScript.substring(0, 250)}..."`); 
+      
       const ttsPromptText = `Narrate the following children's story dialogue.
 The voice should be a ${input.voiceGender} voice.
 The style should be warm, engaging, and perfectly suited for a child aged ${input.childAge}.
@@ -74,24 +76,26 @@ ${dialogueScript}`;
             { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
             { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
           ],
-          // Temperature for TTS is usually not applicable or handled differently.
         },
       });
 
       // More stringent check for a valid media URL
       if (media?.url && media.url.trim() !== '' && media.url.startsWith('data:audio')) {
+        console.log('TTS generation successful. Received audio data URI starting with:', media.url.substring(0, 100) + "...");
         return { audioDataUri: media.url, transformedDialogue: dialogueScript };
       } else {
-        console.warn('TTS generation via ai.generate() did not return a valid media URL. media.url:', media?.url, 'Text response (if any):', text);
+        console.warn('TTS generation via ai.generate() did NOT return a valid audio data URI.');
+        console.warn('Received media object (stringified):', JSON.stringify(media, null, 2));
+        console.warn('Received text response (if any):', text); // Log any text response from the model
         return { 
-            audioDataUri: 'data:audio/wav;base64,placeholder-audio-generation-failed-no-url',
+            audioDataUri: 'data:audio/wav;base64,placeholder-audio-generation-failed-invalid-url', // Specific placeholder
             transformedDialogue: dialogueScript 
         };
       }
     } catch (error) {
-      console.error("Error generating voiceover with ai.generate():", error);
+      console.error("Critical error during voiceover generation with ai.generate():", error);
       return { 
-          audioDataUri: 'data:audio/wav;base64,placeholder-audio-generation-error',
+          audioDataUri: 'data:audio/wav;base64,placeholder-audio-generation-threw-error', // Specific placeholder
           transformedDialogue: dialogueScript
       };
     }
