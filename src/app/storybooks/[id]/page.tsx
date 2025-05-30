@@ -7,7 +7,7 @@ import type { Storybook } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { ArrowLeft, BookOpen, Users, AlertTriangle, Loader2, ShieldAlert, Mic, Film } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, AlertTriangle, Loader2, ShieldAlert, Mic, Film, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStorybookById } from '@/lib/firebase/firestoreService';
@@ -62,6 +62,27 @@ export default function ViewStorybookPage() {
       fetchStorybook();
     }
   }, [storybookId, user, authLoading, router, toast]);
+
+  const handleDownloadAudio = (audioDataUri: string, pageNumber: number) => {
+    const link = document.createElement('a');
+    link.href = audioDataUri;
+    
+    // Extract MIME type to suggest extension, default to .wav
+    let extension = '.wav';
+    const mimeMatch = audioDataUri.match(/^data:(audio\/[^;]+);/);
+    if (mimeMatch && mimeMatch[1]) {
+        const mimeType = mimeMatch[1];
+        if (mimeType === 'audio/mpeg') extension = '.mp3';
+        else if (mimeType === 'audio/ogg') extension = '.ogg';
+        else if (mimeType === 'audio/aac') extension = '.aac';
+        // Add other common audio types if needed
+    }
+    
+    link.download = `StoryPage_${pageNumber}_Voiceover${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (storybook === undefined || authLoading) {
     return (
@@ -125,6 +146,13 @@ export default function ViewStorybookPage() {
           <h3 className="text-xl font-semibold mb-2 text-foreground/80">Original Prompt:</h3>
           <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4 whitespace-pre-wrap">{storybook.originalPrompt}</p>
           
+          {storybook.storyStyleDescription && (
+            <>
+              <h3 className="text-xl font-semibold mb-2 text-foreground/80">Visual Style:</h3>
+              <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4 whitespace-pre-wrap">{storybook.storyStyleDescription}</p>
+            </>
+          )}
+
           <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text (Rewritten)</h2>
           <pre className="whitespace-pre-wrap font-sans text-base p-4 bg-muted rounded-md max-h-[400px] overflow-y-auto border">
             {storybook.rewrittenStoryText || "No full story text available."}
@@ -189,9 +217,20 @@ export default function ViewStorybookPage() {
                               </p>
                            </div>
                          ) : (
-                           <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">
-                              Your browser does not support the audio element.
-                           </audio>
+                           <div className="flex flex-col gap-2">
+                             <audio controls src={page.voiceoverUrl} className="w-full h-10">
+                                Your browser does not support the audio element.
+                             </audio>
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               onClick={() => handleDownloadAudio(page.voiceoverUrl!, page.pageNumber)}
+                               className="self-start"
+                             >
+                               <Download className="mr-2 h-4 w-4" />
+                               Download Voiceover
+                             </Button>
+                           </div>
                          )}
                       </div>
                     )}
@@ -210,6 +249,7 @@ export default function ViewStorybookPage() {
                            </div>
                          ) : (
                            <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
+                               {/* For actual video, replace this div with a <video> tag */}
                                <Film className="h-12 w-12" />
                                <span className="ml-2">Animation Content</span> 
                            </div>
@@ -240,3 +280,5 @@ export default function ViewStorybookPage() {
   );
 }
 
+
+    
