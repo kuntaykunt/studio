@@ -11,10 +11,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function LoginForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -32,9 +34,12 @@ export default function LoginForm() {
     console.log('Login data:', data);
     toast({
       title: "Login Submitted (UI Only)",
-      description: "Login functionality is for demonstration. No actual authentication has occurred.",
+      description: "Login functionality is for demonstration. Redirecting to storybooks...",
     });
-    // router.push('/storybooks'); // Redirect after successful login
+    // In a real app, upon successful login, you would set the auth state globally
+    // and then redirect. For now, this just redirects. The header's auth state
+    // won't update automatically from this action without shared state management.
+    router.push('/storybooks'); 
   }
 
   return (
