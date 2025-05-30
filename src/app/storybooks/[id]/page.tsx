@@ -3,43 +3,16 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Storybook, StoryPage } from '@/lib/types';
+import type { Storybook } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { ArrowLeft, BookOpen, Users, Video, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, Video, AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
-
-// Placeholder data - in a real app, this would come from a database or state management
-const placeholderStorybooks: Storybook[] = [
-  {
-    id: '1',
-    title: 'The Little Bear and The Forest Friends',
-    originalPrompt: 'A story about a little bear who makes new friends in the forest.',
-    childAge: 5,
-    voiceGender: 'female',
-    rewrittenStoryText: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.\\n\\nHe tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.',
-    pages: [
-      { pageNumber: 1, text: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-1', dataAiHint: "bear morning" },
-      { pageNumber: 2, text: 'He tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-2', dataAiHint: "bear squirrel" },
-    ],
-    createdAt: new Date(Date.now() - 86400000 * 2),
-  },
-  {
-    id: '2',
-    title: 'Adventures in Space',
-    originalPrompt: 'A young astronaut travels to a new planet.',
-    childAge: 7,
-    voiceGender: 'male',
-    rewrittenStoryText: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.\\n\\nAfter a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.',
-    pages: [
-      { pageNumber: 1, text: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: false, videoUrl: 'data:video/mp4;base64,mock-video-3', dataAiHint: "spaceship stars" },
-      { pageNumber: 2, text: 'After a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-4', dataAiHint: "alien planet" },
-    ],
-    createdAt: new Date(Date.now() - 86400000 * 5),
-  },
-];
-
+import { useAuth } from '@/contexts/AuthContext';
+import { getStorybookById } from '@/lib/firebase/firestoreService';
+import { useToast } from '@/hooks/use-toast';
+import type { Timestamp } from 'firebase/firestore';
 
 export default function ViewStorybookPage() {
   const router = useRouter();
@@ -47,18 +20,43 @@ export default function ViewStorybookPage() {
   const storybookId = params.id as string;
   
   const [storybook, setStorybook] = useState<Storybook | null | undefined>(undefined); // undefined for loading state
+  const [error, setError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (storybookId) {
-      // Simulate fetching storybook data
-      setTimeout(() => {
-        const foundStorybook = placeholderStorybooks.find(sb => sb.id === storybookId);
-        setStorybook(foundStorybook || null);
-      }, 500);
-    }
-  }, [storybookId]);
+    if (authLoading) return;
 
-  if (storybook === undefined) {
+    if (!user) {
+      toast({ title: "Access Denied", description: "Please log in to view this storybook.", variant: "destructive" });
+      router.push('/login');
+      return;
+    }
+
+    if (storybookId && user) {
+      const fetchStorybook = async () => {
+        try {
+          const fetchedStorybook = await getStorybookById(storybookId, user.uid);
+          if (fetchedStorybook) {
+             setStorybook({
+              ...fetchedStorybook,
+              createdAt: (fetchedStorybook.createdAt as Timestamp)?.toDate ? (fetchedStorybook.createdAt as Timestamp).toDate() : new Date(fetchedStorybook.createdAt as string | number | Date),
+            });
+          } else {
+            setError("Storybook not found or you don't have permission to view it.");
+            setStorybook(null); // Explicitly set to null for "not found" state
+          }
+        } catch (err) {
+          console.error("Error fetching storybook:", err);
+          setError((err as Error).message || "Failed to load storybook details.");
+          setStorybook(null);
+        }
+      };
+      fetchStorybook();
+    }
+  }, [storybookId, user, authLoading, router, toast]);
+
+  if (storybook === undefined || authLoading) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -66,13 +64,30 @@ export default function ViewStorybookPage() {
     );
   }
 
+  if (error) {
+     return (
+      <div className="text-center py-12">
+        <ShieldAlert className="mx-auto h-24 w-24 text-destructive mb-6" />
+        <h1 className="text-4xl font-bold mb-4">Error Loading Storybook</h1>
+        <p className="text-xl text-muted-foreground mb-8">
+          {error}
+        </p>
+        <Button asChild>
+          <Link href="/storybooks">
+            <ArrowLeft className="mr-2 h-5 w-5" /> Back to Library
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+  
   if (!storybook) {
     return (
       <div className="text-center py-12">
         <BookOpen className="mx-auto h-24 w-24 text-destructive mb-6" />
         <h1 className="text-4xl font-bold mb-4">Storybook Not Found</h1>
         <p className="text-xl text-muted-foreground mb-8">
-          Oops! We couldn&apos;t find the storybook you&apos;re looking for.
+          Oops! We couldn&apos;t find the storybook you&apos;re looking for, or you don't have permission to view it.
         </p>
         <Button asChild>
           <Link href="/storybooks">
@@ -95,8 +110,14 @@ export default function ViewStorybookPage() {
           <CardDescription className="text-base text-primary/80 flex items-center gap-2 pt-1">
             <Users className="h-5 w-5" /> For ages {storybook.childAge} and up
           </CardDescription>
+           <CardDescription className="text-xs text-primary/70 pt-1">
+            Created on: {storybook.createdAt instanceof Date ? storybook.createdAt.toLocaleDateString() : 'N/A'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
+          <h3 className="text-xl font-semibold mb-2 text-foreground/80">Original Prompt:</h3>
+          <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4">{storybook.originalPrompt}</p>
+          
           <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text</h2>
           <pre className="whitespace-pre-wrap font-sans text-base p-4 bg-muted rounded-md max-h-[400px] overflow-y-auto border">
             {storybook.rewrittenStoryText || "No full story text available."}

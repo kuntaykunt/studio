@@ -1,12 +1,12 @@
 
-"use client"; // For useState and client-side interactions eventually
+"use client";
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, PlusCircle, Clock, Users, Edit3, Trash2, Loader2 } from 'lucide-react';
+import { BookOpen, PlusCircle, Clock, Users, Edit3, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
-import { Storybook } from '@/lib/types'; // Assuming types.ts is created
+import type { Storybook } from '@/lib/types';
 import { useState, useEffect } from 'react';
 import {
   AlertDialog,
@@ -20,35 +20,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-
-// Placeholder data - replace with actual data fetching later
-const placeholderStorybooks: Storybook[] = [
-  {
-    id: '1',
-    title: 'The Little Bear and The Forest Friends',
-    originalPrompt: 'A story about a little bear who makes new friends in the forest.',
-    childAge: 5,
-    voiceGender: 'female',
-    rewrittenStoryText: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby...',
-    pages: [
-      { pageNumber: 1, text: 'Barnaby woke up one sunny morning.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "bear forest" },
-      { pageNumber: 2, text: 'He decided to explore the woods.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "forest path" },
-    ],
-    createdAt: new Date(Date.now() - 86400000 * 2), // 2 days ago
-  },
-  {
-    id: '2',
-    title: 'Adventures in Space',
-    originalPrompt: 'A young astronaut travels to a new planet.',
-    childAge: 7,
-    voiceGender: 'male',
-    rewrittenStoryText: 'Zoom! Captain Stella blasted off in her spaceship...',
-    pages: [
-      { pageNumber: 1, text: 'Stella looked out at the stars.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "space stars" },
-    ],
-    createdAt: new Date(Date.now() - 86400000 * 5), // 5 days ago
-  },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { getUserStorybooks, deleteStorybook } from '@/lib/firebase/firestoreService';
+import { useRouter } from 'next/navigation';
+import type { Timestamp } from 'firebase/firestore';
 
 
 export default function StorybookLibraryPage() {
@@ -56,25 +31,72 @@ export default function StorybookLibraryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [storyToDelete, setStoryToDelete] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
-    // Simulate fetching data
-    setTimeout(() => {
-      setStorybooks(placeholderStorybooks);
-      setIsLoading(false);
-    }, 1000);
-  }, []);
+    if (authLoading) return; // Wait for auth state to resolve
 
-  const handleDeleteStory = (id: string) => {
-    setStorybooks((prevStorybooks) => prevStorybooks.filter(story => story.id !== id));
-    toast({
-      title: "Story Deleted",
-      description: "The storybook has been removed from your library.",
-    });
-    setStoryToDelete(null); // Close dialog
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to view your storybooks.",
+        variant: "destructive"
+      });
+      router.push('/login');
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchStorybooks = async () => {
+      setIsLoading(true);
+      try {
+        const userStorybooks = await getUserStorybooks(user.uid);
+        setStorybooks(userStorybooks.map(sb => ({
+          ...sb,
+          createdAt: (sb.createdAt as Timestamp)?.toDate ? (sb.createdAt as Timestamp).toDate() : new Date(sb.createdAt as string | number | Date)
+        })));
+      } catch (error) {
+        console.error("Failed to fetch storybooks:", error);
+        toast({
+          title: "Error Fetching Storybooks",
+          description: (error as Error).message || "Could not load your storybooks. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStorybooks();
+  }, [user, authLoading, toast, router]);
+
+  const handleDeleteStory = async (id: string) => {
+    if (!user) {
+        toast({ title: "Error", description: "You must be logged in to delete a story.", variant: "destructive" });
+        setStoryToDelete(null);
+        return;
+    }
+    try {
+      await deleteStorybook(id, user.uid);
+      setStorybooks((prevStorybooks) => prevStorybooks.filter(story => story.id !== id));
+      toast({
+        title: "Story Deleted",
+        description: "The storybook has been removed from your library.",
+      });
+    } catch (error) {
+      console.error("Failed to delete storybook:", error);
+      toast({
+        title: "Error Deleting Story",
+        description: (error as Error).message || "Could not delete the storybook. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setStoryToDelete(null); // Close dialog
+    }
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="space-y-8">
         <div className="flex justify-between items-center">
@@ -100,6 +122,21 @@ export default function StorybookLibraryPage() {
           ))}
         </div>
       </div>
+    );
+  }
+
+  if (!user && !authLoading) {
+    // This case should ideally be handled by the redirect in useEffect,
+    // but as a fallback:
+    return (
+        <div className="text-center py-12">
+            <AlertTriangle className="mx-auto h-16 w-16 text-destructive mb-4" />
+            <h1 className="text-2xl font-bold">Access Denied</h1>
+            <p className="text-muted-foreground">Please log in to view your storybooks.</p>
+            <Button asChild className="mt-4">
+                <Link href="/login">Go to Login</Link>
+            </Button>
+        </div>
     );
   }
 
@@ -137,22 +174,29 @@ export default function StorybookLibraryPage() {
           {storybooks.map((story) => (
             <Card key={story.id} className="flex flex-col justify-between shadow-lg hover:shadow-xl transition-shadow duration-300">
               <div>
-                {story.pages[0]?.imageUrl && (
+                {story.pages[0]?.imageUrl ? (
                   <div className="relative w-full h-40 rounded-t-lg overflow-hidden">
                     <Image 
                       src={story.pages[0].imageUrl} 
                       alt={story.title} 
-                      layout="fill" 
-                      objectFit="cover"
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      style={{objectFit:"cover"}}
                       data-ai-hint={story.pages[0].dataAiHint || "storybook cover"} 
                     />
                   </div>
+                ) : (
+                   <div className="relative w-full h-40 rounded-t-lg overflow-hidden bg-muted flex items-center justify-center">
+                     <BookOpen className="h-12 w-12 text-muted-foreground" />
+                   </div>
                 )}
                 <CardHeader>
                   <CardTitle className="text-xl truncate" title={story.title}>{story.title}</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground flex items-center gap-4">
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Age {story.childAge}</span>
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {story.createdAt.toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> 
+                      {story.createdAt instanceof Date ? story.createdAt.toLocaleDateString() : 'N/A'}
+                    </span>
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -162,7 +206,7 @@ export default function StorybookLibraryPage() {
                 </CardContent>
               </div>
               <CardFooter className="flex justify-end gap-2 border-t pt-4">
-                <Button variant="ghost" size="sm" title="Edit Story (Not Implemented)">
+                <Button variant="ghost" size="sm" title="Edit Story (Not Implemented)" disabled>
                   <Edit3 className="h-4 w-4" />
                 </Button>
                 <AlertDialog>

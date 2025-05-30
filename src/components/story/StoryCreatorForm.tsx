@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { StoryCreationFormData, storyCreationSchema, StoryPage } from '@/lib/types';
+import { StoryCreationFormData, storyCreationSchema, StoryPage, Storybook } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -13,20 +13,30 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileText, Image as ImageIcon, Video, AlertTriangle } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Image as ImageIcon, Video, AlertTriangle, Save } from 'lucide-react';
 import Image from 'next/image';
 import { childSafeStoryGeneration, ChildSafeStoryGenerationInput } from '@/ai/flows/child-safe-story-generation';
 import { generateStoryImages, GenerateStoryImagesInput } from '@/ai/flows/image-generation';
 import { generateVideoClip, GenerateVideoClipInput } from '@/ai/flows/video-clip-generation';
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from '@/contexts/AuthContext';
+import { addStorybook } from '@/lib/firebase/firestoreService';
+import { useRouter } from 'next/navigation';
+import type { Timestamp } from 'firebase/firestore';
 
-type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'videosGenerated';
+
+type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'videosGenerated' | 'saved';
 
 export default function StoryCreatorForm() {
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState<GenerationStep>('initial');
   
+  const [originalPrompt, setOriginalPrompt] = useState<string>('');
   const [rewrittenStory, setRewrittenStory] = useState<string | null>(null);
   const [storyPages, setStoryPages] = useState<StoryPage[]>([]);
   const [overallProgress, setOverallProgress] = useState(0);
@@ -34,6 +44,7 @@ export default function StoryCreatorForm() {
   const form = useForm<StoryCreationFormData>({
     resolver: zodResolver(storyCreationSchema),
     defaultValues: {
+      title: '',
       storyPrompt: '',
       childAge: 5,
       voiceGender: 'female',
@@ -43,6 +54,7 @@ export default function StoryCreatorForm() {
   async function handleChildSafeStoryGeneration(data: StoryCreationFormData) {
     setIsLoading(true);
     setOverallProgress(10);
+    setOriginalPrompt(data.storyPrompt); // Save original prompt
     try {
       const input: ChildSafeStoryGenerationInput = {
         storyText: data.storyPrompt,
@@ -78,7 +90,7 @@ export default function StoryCreatorForm() {
       pageNumber: index + 1,
       text: text,
       isLoadingImage: true,
-      dataAiHint: `page ${index + 1} content` // Generic hint, can be improved
+      dataAiHint: `page ${index + 1} content` 
     }));
     setStoryPages(initialPages);
     setOverallProgress(40);
@@ -99,7 +111,7 @@ export default function StoryCreatorForm() {
         imageUrl: result.imageUrl,
         imageMatchesText: result.imageMatchesText,
         isLoadingImage: false,
-        dataAiHint: `page ${index + 1} illustration` // Update hint
+        dataAiHint: `page ${index + 1} illustration` 
       }));
       setStoryPages(updatedPages);
       setCurrentStep('imagesGenerated');
@@ -107,7 +119,7 @@ export default function StoryCreatorForm() {
 
     } catch (error) {
       console.error("Error generating images:", error);
-      toast({ variant: "destructive", title: "Error Generating Images", description: "Failed to generate all images. Please try again or check individual pages." });
+      toast({ variant: "destructive", title: "Error Generating Images", description: "Failed to generate all images. Check console for details." });
       setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); 
       setOverallProgress(33); 
     } finally {
@@ -126,7 +138,6 @@ export default function StoryCreatorForm() {
 
     const videoPromises = storyPages.map(async (page, index) => {
       if (!page.imageUrl) {
-        // If no image, still mark as not loading video but don't attempt to generate
         return { ...page, isLoadingVideo: false, videoUrl: undefined };
       }
 
@@ -139,13 +150,11 @@ export default function StoryCreatorForm() {
       
       try {
         const result = await generateVideoClip(input);
-         // Increment progress more granularly
         setOverallProgress(prev => Math.min(100, prev + (30 / storyPages.filter(p => p.imageUrl).length)));
         return { ...page, videoUrl: result.videoDataUri, isLoadingVideo: false };
       } catch (videoError) {
         console.error(`Error generating video placeholder for page ${page.pageNumber}:`, videoError);
-        toast({ variant: "destructive", title: `Video Placeholder Error (Page ${page.pageNumber})`, description: "Could not generate video placeholder for this page." });
-        return { ...page, isLoadingVideo: false, videoUrl: undefined }; // Ensure videoUrl is undefined on error
+        return { ...page, isLoadingVideo: false, videoUrl: undefined };
       }
     });
 
@@ -154,22 +163,100 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithVideos);
       setCurrentStep('videosGenerated');
       setOverallProgress(100);
-      toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added for pages with images. Actual video generation is a feature in development." });
+      toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added. You can now save your storybook." });
     } catch (error) {
        console.error("Error during video placeholder generation process:", error);
-       toast({ variant: "destructive", title: "Video Placeholder Generation Failed", description: "An unexpected error occurred while processing video placeholders." });
+       toast({ variant: "destructive", title: "Video Placeholder Generation Failed", description: "An unexpected error occurred." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVideo: false })));
-       setOverallProgress(66); // Revert progress to image generation complete
+       setOverallProgress(66); 
     } finally {
       setIsLoading(false);
     }
   }
 
+  async function handleSaveStorybook() {
+    if (!user) {
+      toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a storybook." });
+      return;
+    }
+    if (!rewrittenStory || storyPages.length === 0 || !originalPrompt) {
+       toast({ variant: "destructive", title: "Incomplete Story", description: "Cannot save an incomplete story. Please generate all parts." });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const formData = form.getValues();
+      const storybookToSave: Omit<Storybook, 'id' | 'userId' | 'createdAt'> = {
+        title: formData.title,
+        originalPrompt: originalPrompt, // Use the saved original prompt
+        childAge: formData.childAge,
+        voiceGender: formData.voiceGender,
+        rewrittenStoryText: rewrittenStory,
+        pages: storyPages.map(p => ({ // Remove temporary loading states before saving
+            pageNumber: p.pageNumber,
+            text: p.text,
+            imageUrl: p.imageUrl,
+            imageMatchesText: p.imageMatchesText,
+            videoUrl: p.videoUrl,
+            dataAiHint: p.dataAiHint,
+        })),
+      };
+
+      const newStorybookId = await addStorybook(user.uid, storybookToSave);
+      toast({ title: "Storybook Saved!", description: `"${formData.title}" has been added to your library.` });
+      setCurrentStep('saved');
+      // Reset for a new story after a brief delay or user action
+      // For now, let's redirect to the library
+      router.push('/storybooks');
+      // Optionally, reset form here or on a "Create Another" button if redirecting to specific story
+      // form.reset();
+      // setRewrittenStory(null);
+      // setStoryPages([]);
+      // setCurrentStep('initial');
+      // setOverallProgress(0);
+
+
+    } catch (error) {
+      console.error("Error saving storybook:", error);
+      toast({ variant: "destructive", title: "Save Failed", description: (error as Error).message || "Could not save the storybook to your library." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+  
+  const resetFormAndState = () => {
+    form.reset();
+    setRewrittenStory(null);
+    setStoryPages([]);
+    setCurrentStep('initial');
+    setOverallProgress(0);
+    setOriginalPrompt('');
+    toast({ title: "New Story Started", description: "The form has been reset. Let's create another magical tale!" });
+  };
+
+
   const renderCurrentStepContent = () => {
+    if (authLoading) {
+      return <div className="flex justify-center items-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user data...</span></div>;
+    }
+    if (!user && currentStep !== 'initial') { // Allow initial form display even if not logged in, but subsequent steps need user
+        return (
+            <Card className="mt-6 text-center">
+                <CardHeader>
+                    <CardTitle>Please Log In</CardTitle>
+                    <CardDescription>You need to be logged in to create and save stories.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button onClick={() => router.push('/login')}>Go to Login</Button>
+                </CardContent>
+            </Card>
+        );
+    }
+
     switch (currentStep) {
       case 'initial':
         return (
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || !user}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Generate Child-Safe Story
           </Button>
@@ -202,7 +289,7 @@ export default function StoryCreatorForm() {
                 <CardDescription>
                   Your story pages with generated images{currentStep === 'videosGenerated' && ' and video placeholders'}.
                   {currentStep === 'imagesGenerated' && ' Next, generate video placeholders.'}
-                  {currentStep === 'videosGenerated' && ' All generation steps complete!'}
+                  {currentStep === 'videosGenerated' && ' Review your story and save it!'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -222,8 +309,7 @@ export default function StoryCreatorForm() {
                     )}
                     {!page.imageUrl && !page.isLoadingImage && <p className="text-sm text-muted-foreground">No image for this page.</p>}
 
-
-                    {currentStep === 'videosGenerated' && page.imageUrl && ( // Only show video section if image exists
+                    {currentStep === 'videosGenerated' && page.imageUrl && ( 
                       <>
                         {page.isLoadingVideo && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating video placeholder...</div>}
                         {page.videoUrl && !page.isLoadingVideo && (
@@ -251,21 +337,38 @@ export default function StoryCreatorForm() {
                     </Button>
                   </CardFooter>
               )}
+               {currentStep === 'videosGenerated' && (
+                 <CardFooter className="flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
+                    <Button onClick={handleSaveStorybook} className="w-full sm:w-auto bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSaving || isLoading || storyPages.length === 0}>
+                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Storybook
+                    </Button>
+                     <Button onClick={resetFormAndState} variant="outline" className="w-full sm:w-auto">
+                        Create Another Story
+                    </Button>
+                  </CardFooter>
+              )}
             </Card>
-            {currentStep === 'videosGenerated' && (
-                <Button onClick={() => {
-                    form.reset();
-                    setRewrittenStory(null);
-                    setStoryPages([]);
-                    setCurrentStep('initial');
-                    setOverallProgress(0);
-                    toast({ title: "New Story Started", description: "The form has been reset. Let's create another magical tale!" });
-                }} variant="outline" className="w-full">
-                    Start a New Story
-                </Button>
-            )}
+           
           </div>
         );
+         case 'saved':
+            return (
+                <Card className="mt-6 text-center">
+                    <CardHeader>
+                        <CardTitle>Storybook Saved!</CardTitle>
+                        <CardDescription>Your magical story has been saved to your library.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Button onClick={() => router.push('/storybooks')} className="w-full sm:w-auto">
+                            Go to My Storybooks
+                        </Button>
+                        <Button onClick={resetFormAndState} variant="outline" className="w-full sm:w-auto">
+                            Create Another Story
+                        </Button>
+                    </CardContent>
+                </Card>
+            );
       default:
         return null;
     }
@@ -274,8 +377,24 @@ export default function StoryCreatorForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleChildSafeStoryGeneration)} className="space-y-8">
-        {currentStep === 'initial' && (
+        {(currentStep === 'initial' || currentStep === 'saved') && ( // Show form inputs only at initial or after save->reset
           <>
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="title" className="text-lg font-semibold">Story Title</FormLabel>
+                  <FormControl>
+                    <Input id="title" placeholder="e.g., The Brave Little Knight" className="text-base" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Give your story a catchy title!
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="storyPrompt"
@@ -354,11 +473,16 @@ export default function StoryCreatorForm() {
           </>
         )}
         
-        {isLoading && overallProgress > 0 && (
+        {(isLoading || isSaving) && overallProgress > 0 && currentStep !== 'saved' && (
             <div className="space-y-2 pt-4">
-                <Label className="text-sm text-muted-foreground">Generation Progress: {currentStep === 'initial' ? 'Generating Story...' : currentStep === 'storyGenerated' ? 'Generating Images...' : 'Generating Video Placeholders...'}</Label>
-                <Progress value={overallProgress} className="w-full" />
-                <p className="text-xs text-muted-foreground text-center">{Math.round(overallProgress)}% complete</p>
+                <Label className="text-sm text-muted-foreground">
+                    {isSaving ? 'Saving Storybook...' : 
+                     currentStep === 'initial' ? 'Generating Story...' : 
+                     currentStep === 'storyGenerated' ? 'Generating Images...' : 
+                     'Generating Video Placeholders...'}
+                </Label>
+                <Progress value={isSaving ? 50 : overallProgress} className="w-full" /> {/* Show some progress for saving */}
+                <p className="text-xs text-muted-foreground text-center">{Math.round(isSaving ? 50 : overallProgress)}% complete</p>
             </div>
         )}
 
@@ -367,3 +491,4 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
+
