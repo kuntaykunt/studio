@@ -53,7 +53,7 @@ export default function StoryCreatorForm() {
       setOverallProgress(33);
       setRewrittenStory(result.rewrittenStory);
       setCurrentStep('storyGenerated');
-      toast({ title: "Story Generated!", description: "The child-safe story is ready. Next up: images!" });
+      toast({ title: "Story Generated!", description: "The child-safe story is ready. Review it, then we'll generate images!" });
     } catch (error) {
       console.error("Error generating child-safe story:", error);
       toast({ variant: "destructive", title: "Error", description: "Failed to generate story. Please try again." });
@@ -67,9 +67,9 @@ export default function StoryCreatorForm() {
     if (!rewrittenStory || !form.getValues('childAge')) return;
     setIsLoading(true);
     
-    const pagesText = rewrittenStory.split('\n\n').map(text => text.trim()).filter(text => text.length > 0);
+    const pagesText = rewrittenStory.split('\\n\\n').map(text => text.trim()).filter(text => text.length > 0);
     if (pagesText.length === 0) {
-      toast({ variant: "destructive", title: "Error", description: "Rewritten story is empty or could not be split into pages." });
+      toast({ variant: "destructive", title: "Error", description: "Rewritten story is empty or could not be split into pages. Try a longer story or ensure paragraphs are separated by double line breaks." });
       setIsLoading(false);
       return;
     }
@@ -78,6 +78,7 @@ export default function StoryCreatorForm() {
       pageNumber: index + 1,
       text: text,
       isLoadingImage: true,
+      dataAiHint: `page ${index + 1} content` // Generic hint, can be improved
     }));
     setStoryPages(initialPages);
     setOverallProgress(40);
@@ -87,7 +88,7 @@ export default function StoryCreatorForm() {
         storyPages: pagesText.map(text => ({ pageText: text })),
         childAge: form.getValues('childAge'),
       };
-      toast({ title: "Generating images...", description: "Our AI artists are drawing pictures for each page." });
+      toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s).` });
       
       const results = await generateStoryImages(input);
       setOverallProgress(66);
@@ -98,16 +99,17 @@ export default function StoryCreatorForm() {
         imageUrl: result.imageUrl,
         imageMatchesText: result.imageMatchesText,
         isLoadingImage: false,
+        dataAiHint: `page ${index + 1} illustration` // Update hint
       }));
       setStoryPages(updatedPages);
       setCurrentStep('imagesGenerated');
-      toast({ title: "Images Generated!", description: "Beautiful images are ready for your story. Let's make some videos!" });
+      toast({ title: "Images Generated!", description: `Beautiful images are ready for your story. Next: video placeholders!` });
 
     } catch (error) {
       console.error("Error generating images:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to generate images. Please try again." });
-      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); // Clear loading state
-      setOverallProgress(33); // Revert progress
+      toast({ variant: "destructive", title: "Error Generating Images", description: "Failed to generate all images. Please try again or check individual pages." });
+      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); 
+      setOverallProgress(33); 
     } finally {
       setIsLoading(false);
     }
@@ -118,13 +120,15 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(70);
 
-    // Mark pages for video loading
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVideo: true })));
 
-    toast({ title: "Preparing video placeholders...", description: "Setting up placeholder video clips for each page." });
+    toast({ title: "Generating Video Placeholders...", description: "Setting up placeholder video clips for each page. Actual video generation is a feature in development." });
 
     const videoPromises = storyPages.map(async (page, index) => {
-      if (!page.imageUrl) return { ...page, isLoadingVideo: false }; // Skip if no image, clear loading
+      if (!page.imageUrl) {
+        // If no image, still mark as not loading video but don't attempt to generate
+        return { ...page, isLoadingVideo: false, videoUrl: undefined };
+      }
 
       const input: GenerateVideoClipInput = {
         imageDataUri: page.imageUrl, 
@@ -135,12 +139,13 @@ export default function StoryCreatorForm() {
       
       try {
         const result = await generateVideoClip(input);
-        setOverallProgress(prev => prev + (30 / storyPages.filter(p => p.imageUrl).length)); // Progress only for pages with images
+         // Increment progress more granularly
+        setOverallProgress(prev => Math.min(100, prev + (30 / storyPages.filter(p => p.imageUrl).length)));
         return { ...page, videoUrl: result.videoDataUri, isLoadingVideo: false };
       } catch (videoError) {
-        console.error(`Error generating video for page ${page.pageNumber}:`, videoError);
-        toast({ variant: "destructive", title: `Video Error (Page ${page.pageNumber})`, description: "Could not generate video placeholder for this page." });
-        return { ...page, isLoadingVideo: false };
+        console.error(`Error generating video placeholder for page ${page.pageNumber}:`, videoError);
+        toast({ variant: "destructive", title: `Video Placeholder Error (Page ${page.pageNumber})`, description: "Could not generate video placeholder for this page." });
+        return { ...page, isLoadingVideo: false, videoUrl: undefined }; // Ensure videoUrl is undefined on error
       }
     });
 
@@ -149,12 +154,12 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithVideos);
       setCurrentStep('videosGenerated');
       setOverallProgress(100);
-      toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added. Actual video generation is a feature in development." });
+      toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added for pages with images. Actual video generation is a feature in development." });
     } catch (error) {
        console.error("Error during video placeholder generation process:", error);
-       toast({ variant: "destructive", title: "Video Placeholder Generation Failed", description: "An unexpected error occurred." });
+       toast({ variant: "destructive", title: "Video Placeholder Generation Failed", description: "An unexpected error occurred while processing video placeholders." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVideo: false })));
-       setOverallProgress(66); 
+       setOverallProgress(66); // Revert progress to image generation complete
     } finally {
       setIsLoading(false);
     }
@@ -174,15 +179,15 @@ export default function StoryCreatorForm() {
           <Card className="mt-6 bg-background/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><FileText /> Rewritten Story</CardTitle>
-              <CardDescription>Here is the child-safe version of your story. Review it and then generate images.</CardDescription>
+              <CardDescription>Here is the child-safe version of your story. Review it, then click below to generate images for each page.</CardDescription>
             </CardHeader>
             <CardContent>
-              <pre className="whitespace-pre-wrap font-sans text-sm p-4 bg-muted rounded-md max-h-96 overflow-y-auto">{rewrittenStory}</pre>
+              <pre className="whitespace-pre-wrap font-sans text-sm p-4 bg-muted rounded-md max-h-96 overflow-y-auto border">{rewrittenStory}</pre>
             </CardContent>
             <CardFooter>
-              <Button onClick={handleImageGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+              <Button onClick={handleImageGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || !rewrittenStory}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-                Generate Images for Story
+                Generate Images for Story Pages
               </Button>
             </CardFooter>
           </Card>
@@ -194,7 +199,11 @@ export default function StoryCreatorForm() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><FileText /> Story with Media</CardTitle>
-                <CardDescription>Your story pages with generated images{currentStep === 'videosGenerated' && ' and video placeholders'}.</CardDescription>
+                <CardDescription>
+                  Your story pages with generated images{currentStep === 'videosGenerated' && ' and video placeholders'}.
+                  {currentStep === 'imagesGenerated' && ' Next, generate video placeholders.'}
+                  {currentStep === 'videosGenerated' && ' All generation steps complete!'}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {storyPages.map((page) => (
@@ -205,27 +214,30 @@ export default function StoryCreatorForm() {
                     {page.isLoadingImage && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating image...</div>}
                     {page.imageUrl && !page.isLoadingImage && (
                       <div className="my-2">
-                        <Image src={page.imageUrl} alt={`Story page ${page.pageNumber} illustration`} width={300} height={200} className="rounded-md shadow-sm border" data-ai-hint="story page" />
+                        <Image src={page.imageUrl} alt={`Story page ${page.pageNumber} illustration`} width={300} height={200} className="rounded-md shadow-sm border object-cover" data-ai-hint={page.dataAiHint || "story page"} />
                         {!page.imageMatchesText && (
                            <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged this image as potentially not matching the text.</p>
                         )}
                       </div>
                     )}
+                    {!page.imageUrl && !page.isLoadingImage && <p className="text-sm text-muted-foreground">No image for this page.</p>}
 
-                    {currentStep === 'videosGenerated' && (
+
+                    {currentStep === 'videosGenerated' && page.imageUrl && ( // Only show video section if image exists
                       <>
                         {page.isLoadingVideo && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating video placeholder...</div>}
                         {page.videoUrl && !page.isLoadingVideo && (
                            <div className="mt-2">
-                             <p className="text-sm font-medium">Video Clip (Placeholder):</p>
+                             <p className="text-sm font-medium">Video Clip:</p>
                              <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                                <Video className="h-12 w-12" />
                                <span className="ml-2">Video Placeholder</span>
                              </div>
                              <p className="text-xs text-muted-foreground mt-1 break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
-                             <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development.</p>
+                             <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development. This is a placeholder.</p>
                            </div>
                         )}
+                        {!page.videoUrl && !page.isLoadingVideo && <p className="text-sm text-muted-foreground mt-2">No video placeholder for this page.</p>}
                       </>
                     )}
                   </Card>
@@ -233,7 +245,7 @@ export default function StoryCreatorForm() {
               </CardContent>
               {currentStep === 'imagesGenerated' && (
                  <CardFooter>
-                    <Button onClick={handleVideoGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+                    <Button onClick={handleVideoGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || storyPages.length === 0 || !storyPages.some(p => p.imageUrl)}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
                       Generate Video Placeholders
                     </Button>
@@ -247,7 +259,7 @@ export default function StoryCreatorForm() {
                     setStoryPages([]);
                     setCurrentStep('initial');
                     setOverallProgress(0);
-                    toast({ title: "New Story Started", description: "The form has been reset." });
+                    toast({ title: "New Story Started", description: "The form has been reset. Let's create another magical tale!" });
                 }} variant="outline" className="w-full">
                     Start a New Story
                 </Button>
@@ -273,14 +285,14 @@ export default function StoryCreatorForm() {
                   <FormControl>
                     <Textarea
                       id="storyPrompt"
-                      placeholder="e.g., A brave little knight goes on a quest to find a friendly dragon..."
+                      placeholder="e.g., A brave little knight goes on a quest to find a friendly dragon... Try to describe a few different scenes or events!"
                       rows={6}
                       className="text-base"
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Describe the story you want to create. The AI will rewrite it to be child-safe.
+                    Describe the story you want to create. The AI will rewrite it to be child-safe. Use double line breaks (press Enter twice) to separate ideas for different pages.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -332,7 +344,7 @@ export default function StoryCreatorForm() {
                       </RadioGroup>
                     </FormControl>
                     <FormDescription>
-                      Choose the voice for video narration.
+                      Choose the voice for video narration placeholders.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -344,8 +356,9 @@ export default function StoryCreatorForm() {
         
         {isLoading && overallProgress > 0 && (
             <div className="space-y-2 pt-4">
-                <Label className="text-sm text-muted-foreground">Generation Progress</Label>
+                <Label className="text-sm text-muted-foreground">Generation Progress: {currentStep === 'initial' ? 'Generating Story...' : currentStep === 'storyGenerated' ? 'Generating Images...' : 'Generating Video Placeholders...'}</Label>
                 <Progress value={overallProgress} className="w-full" />
+                <p className="text-xs text-muted-foreground text-center">{Math.round(overallProgress)}% complete</p>
             </div>
         )}
 
@@ -354,5 +367,3 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
-
-    

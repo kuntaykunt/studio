@@ -7,6 +7,7 @@ export interface StoryPage {
   videoUrl?: string; // Placeholder for video data URI or URL
   isLoadingImage?: boolean;
   isLoadingVideo?: boolean;
+  dataAiHint?: string; // For individual page images
 }
 
 export interface Storybook {

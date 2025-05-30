@@ -18,10 +18,10 @@ const placeholderStorybooks: Storybook[] = [
     originalPrompt: 'A story about a little bear who makes new friends in the forest.',
     childAge: 5,
     voiceGender: 'female',
-    rewrittenStoryText: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.\n\nHe tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.',
+    rewrittenStoryText: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.\\n\\nHe tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.',
     pages: [
-      { pageNumber: 1, text: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-1' },
-      { pageNumber: 2, text: 'He tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-2' },
+      { pageNumber: 1, text: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby. He had fluffy brown fur and a very curious nose. One sunny morning, Barnaby woke up with a happy wiggle. "Today is a good day for an adventure!" he thought.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-1', dataAiHint: "bear morning" },
+      { pageNumber: 2, text: 'He tiptoed out of his cozy cave and into the bright green forest. Birds were singing, and colorful butterflies fluttered by. Barnaby saw a little squirrel with a bushy tail scampering up a tree. "Hello!" called Barnaby. The squirrel peeked down, chattering a friendly reply.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-2', dataAiHint: "bear squirrel" },
     ],
     createdAt: new Date(Date.now() - 86400000 * 2),
   },
@@ -31,10 +31,10 @@ const placeholderStorybooks: Storybook[] = [
     originalPrompt: 'A young astronaut travels to a new planet.',
     childAge: 7,
     voiceGender: 'male',
-    rewrittenStoryText: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.\n\nAfter a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.',
+    rewrittenStoryText: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.\\n\\nAfter a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.',
     pages: [
-      { pageNumber: 1, text: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: false, videoUrl: 'data:video/mp4;base64,mock-video-3' },
-      { pageNumber: 2, text: 'After a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-4' },
+      { pageNumber: 1, text: 'Zoom! Captain Stella blasted off in her shiny spaceship, leaving the blue Earth far behind. Her mission: to explore the mysterious Planet Floopy-doo. Through the spaceship window, stars twinkled like scattered diamonds. "Wow!" whispered Stella, her eyes wide with excitement.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: false, videoUrl: 'data:video/mp4;base64,mock-video-3', dataAiHint: "spaceship stars" },
+      { pageNumber: 2, text: 'After a long journey, Planet Floopy-doo appeared. It was covered in purple grass and giant, bouncy mushrooms! Stella landed her ship gently. "Time to explore!" she declared, putting on her space helmet.', imageUrl: 'https://placehold.co/600x400.png', imageMatchesText: true, videoUrl: 'data:video/mp4;base64,mock-video-4', dataAiHint: "alien planet" },
     ],
     createdAt: new Date(Date.now() - 86400000 * 5),
   },
@@ -130,7 +130,7 @@ export default function ViewStorybookPage() {
                         width={400}
                         height={260}
                         className="rounded-lg border shadow-md object-cover"
-                        data-ai-hint="story illustration"
+                        data-ai-hint={page.dataAiHint || "story illustration"}
                       />
                       {!page.imageMatchesText && (
                         <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged this image as potentially not matching the text.</p>
@@ -139,13 +139,13 @@ export default function ViewStorybookPage() {
                   )}
                   {page.videoUrl && (
                     <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video Clip (Placeholder):</h3>
+                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video Clip:</h3>
                        <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                            <Video className="h-12 w-12" />
                            <span className="ml-2">Video Placeholder</span>
                        </div>
                        <p className="text-xs text-muted-foreground mt-1 break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
-                       <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development.</p>
+                       <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development. This is a placeholder.</p>
                     </div>
                   )}
                 </div>
@@ -170,5 +170,3 @@ export default function ViewStorybookPage() {
     </div>
   );
 }
-
-    

@@ -4,10 +4,22 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, PlusCircle, Clock, Users, Edit3, Trash2 } from 'lucide-react';
+import { BookOpen, PlusCircle, Clock, Users, Edit3, Trash2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Storybook } from '@/lib/types'; // Assuming types.ts is created
 import { useState, useEffect } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
 // Placeholder data - replace with actual data fetching later
 const placeholderStorybooks: Storybook[] = [
@@ -19,8 +31,8 @@ const placeholderStorybooks: Storybook[] = [
     voiceGender: 'female',
     rewrittenStoryText: 'Once upon a time, in a cozy forest, lived a little bear named Barnaby...',
     pages: [
-      { pageNumber: 1, text: 'Barnaby woke up one sunny morning.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true },
-      { pageNumber: 2, text: 'He decided to explore the woods.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true },
+      { pageNumber: 1, text: 'Barnaby woke up one sunny morning.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "bear forest" },
+      { pageNumber: 2, text: 'He decided to explore the woods.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "forest path" },
     ],
     createdAt: new Date(Date.now() - 86400000 * 2), // 2 days ago
   },
@@ -32,7 +44,7 @@ const placeholderStorybooks: Storybook[] = [
     voiceGender: 'male',
     rewrittenStoryText: 'Zoom! Captain Stella blasted off in her spaceship...',
     pages: [
-      { pageNumber: 1, text: 'Stella looked out at the stars.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true },
+      { pageNumber: 1, text: 'Stella looked out at the stars.', imageUrl: 'https://placehold.co/300x200.png', imageMatchesText: true, dataAiHint: "space stars" },
     ],
     createdAt: new Date(Date.now() - 86400000 * 5), // 5 days ago
   },
@@ -42,6 +54,8 @@ const placeholderStorybooks: Storybook[] = [
 export default function StorybookLibraryPage() {
   const [storybooks, setStorybooks] = useState<Storybook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [storyToDelete, setStoryToDelete] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     // Simulate fetching data
@@ -50,6 +64,15 @@ export default function StorybookLibraryPage() {
       setIsLoading(false);
     }, 1000);
   }, []);
+
+  const handleDeleteStory = (id: string) => {
+    setStorybooks((prevStorybooks) => prevStorybooks.filter(story => story.id !== id));
+    toast({
+      title: "Story Deleted",
+      description: "The storybook has been removed from your library.",
+    });
+    setStoryToDelete(null); // Close dialog
+  };
 
   if (isLoading) {
     return (
@@ -121,7 +144,7 @@ export default function StorybookLibraryPage() {
                       alt={story.title} 
                       layout="fill" 
                       objectFit="cover"
-                      data-ai-hint="storybook cover" 
+                      data-ai-hint={story.pages[0].dataAiHint || "storybook cover"} 
                     />
                   </div>
                 )}
@@ -142,9 +165,29 @@ export default function StorybookLibraryPage() {
                 <Button variant="ghost" size="sm" title="Edit Story (Not Implemented)">
                   <Edit3 className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" title="Delete Story (Not Implemented)" className="text-destructive hover:text-destructive/80 hover:bg-destructive/10">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" title="Delete Story" className="text-destructive hover:text-destructive/80 hover:bg-destructive/10" onClick={() => setStoryToDelete(story.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  {storyToDelete === story.id && (
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure you want to delete this story?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete the storybook &quot;{story.title}&quot;.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setStoryToDelete(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeleteStory(story.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  )}
+                </AlertDialog>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/storybooks/${story.id}`}>View Story</Link>
                 </Button>
