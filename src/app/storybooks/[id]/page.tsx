@@ -7,14 +7,16 @@ import type { Storybook } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { ArrowLeft, BookOpen, Users, AlertTriangle, Loader2, ShieldAlert, Mic, Film, Download } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, AlertTriangle, Loader2, ShieldAlert, Mic, Film, Download, Tag } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStorybookById } from '@/lib/firebase/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
+import { learningTags as allLearningTags, type LearningTag } from '@/lib/learningTags'; // Import learning tags
+import { Badge } from '@/components/ui/badge'; // Import Badge
 
-const PLACEHOLDER_ANIMATION_URI_PREFIX = 'data:video/mp4;base64,placeholder-video-animation'; // More specific prefix
+const PLACEHOLDER_ANIMATION_URI_PREFIX = 'data:video/mp4;base64,placeholder-video-animation'; 
 const PLACEHOLDER_AUDIO_PREFIXES = [
     'data:audio/wav;base64,placeholder-audio', 
     'data:audio/mp3;base64,placeholder-audio'
@@ -27,6 +29,7 @@ export default function ViewStorybookPage() {
   const storybookId = params.id as string;
   
   const [storybook, setStorybook] = useState<Storybook | null | undefined>(undefined); 
+  const [selectedLearningTagsDetails, setSelectedLearningTagsDetails] = useState<LearningTag[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -45,10 +48,20 @@ export default function ViewStorybookPage() {
         try {
           const fetchedStorybook = await getStorybookById(storybookId, user.uid);
           if (fetchedStorybook) {
-             setStorybook({
+             const storybookWithDate = {
               ...fetchedStorybook,
               createdAt: (fetchedStorybook.createdAt as Timestamp)?.toDate ? (fetchedStorybook.createdAt as Timestamp).toDate() : new Date(fetchedStorybook.createdAt as string | number | Date),
-            });
+            };
+            setStorybook(storybookWithDate);
+            
+            // Get details for selected learning tags
+            if (storybookWithDate.selectedLearningTagIds && storybookWithDate.selectedLearningTagIds.length > 0) {
+                const tagsDetails = allLearningTags.filter(tag => storybookWithDate.selectedLearningTagIds!.includes(tag.id));
+                setSelectedLearningTagsDetails(tagsDetails);
+            } else {
+                setSelectedLearningTagsDetails([]);
+            }
+
           } else {
             setError("Storybook not found or you don't have permission to view it.");
             setStorybook(null); 
@@ -67,14 +80,13 @@ export default function ViewStorybookPage() {
     const link = document.createElement('a');
     link.href = audioDataUri;
     
-    let extension = '.wav'; // Default extension
+    let extension = '.wav'; 
     const mimeMatch = audioDataUri.match(/^data:(audio\/[^;]+);/);
     if (mimeMatch && mimeMatch[1]) {
         const mimeType = mimeMatch[1];
         if (mimeType === 'audio/mpeg') extension = '.mp3';
         else if (mimeType === 'audio/ogg') extension = '.ogg';
         else if (mimeType === 'audio/aac') extension = '.aac';
-        // Add other common audio types if needed
     }
     
     link.download = `StoryPage_${pageNumber}_Voiceover${extension}`;
@@ -152,6 +164,18 @@ export default function ViewStorybookPage() {
             </>
           )}
 
+          {selectedLearningTagsDetails.length > 0 && (
+             <>
+              <h3 className="text-xl font-semibold mb-2 text-foreground/80 flex items-center gap-2"><Tag className="h-5 w-5"/> Learning Themes:</h3>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedLearningTagsDetails.map(tag => (
+                  <Badge key={tag.id} variant="secondary" title={tag.learningFocus}>{tag.name}</Badge>
+                ))}
+              </div>
+            </>
+          )}
+
+
           <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text (Rewritten)</h2>
           <pre className="whitespace-pre-wrap font-sans text-base p-4 bg-muted rounded-md max-h-[400px] overflow-y-auto border">
             {storybook.rewrittenStoryText || "No full story text available."}
@@ -166,16 +190,9 @@ export default function ViewStorybookPage() {
       {storybook.pages.length > 0 ? (
         <div className="space-y-10">
           {storybook.pages.map((page) => {
-            // Check if voiceoverUrl is defined and then if it starts with any placeholder prefixes
             const isPlaceholderAudio = !page.voiceoverUrl || PLACEHOLDER_AUDIO_PREFIXES.some(prefix => page.voiceoverUrl?.startsWith(prefix));
-            // Check if animationUrl is defined and then if it starts with the placeholder prefix
             const isPlaceholderAnimation = !page.animationUrl || page.animationUrl?.startsWith(PLACEHOLDER_ANIMATION_URI_PREFIX);
             
-            // For debugging the download button visibility:
-            // if (page.pageNumber === 1) { // Log for the first page only
-            //   console.log(`Page ${page.pageNumber} - voiceoverUrl: ${page.voiceoverUrl}, isPlaceholderAudio: ${isPlaceholderAudio}`);
-            // }
-
             return (
               <Card key={page.pageNumber} className="shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl">
                 <CardHeader className="bg-secondary/30">
@@ -183,7 +200,7 @@ export default function ViewStorybookPage() {
                 </CardHeader>
                 <CardContent className="p-6 grid md:grid-cols-2 gap-6 items-start">
                   <div>
-                    <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text (Original):</h3>
+                    <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text:</h3>
                     <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
                     {page.transformedDialogue && (
                       <details className="mt-3 text-sm">
@@ -265,7 +282,6 @@ export default function ViewStorybookPage() {
                               </p>
                            </div>
                          ) : (
-                           // This block would render a real video if isPlaceholderAnimation were false
                            <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                                <Film className="h-12 w-12" />
                                <span className="ml-2">Animation Content (Not Placeholder)</span> 
@@ -273,12 +289,12 @@ export default function ViewStorybookPage() {
                          )}
                       </div>
                     ) : (
-                       page.imageUrl && ( // Only show "no animation" if there was an image to animate
+                       page.imageUrl && ( 
                          <div>
                            <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
                             <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
                                 <p className="text-xs text-muted-foreground">
-                                    Animation placeholder not set or feature in development.
+                                    Animation feature in development. Placeholder not set or an image was not available to animate.
                                 </p>
                             </div>
                          </div>

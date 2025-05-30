@@ -1,5 +1,6 @@
 
 import type { Timestamp } from 'firebase/firestore';
+import type { LearningTag } from './learningTags'; // Import LearningTag
 
 export interface StoryPage {
   pageNumber: number;
@@ -22,7 +23,8 @@ export interface Storybook {
   originalPrompt: string;
   childAge: number;
   voiceGender: 'male' | 'female';
-  storyStyleDescription?: string; 
+  storyStyleDescription?: string;
+  selectedLearningTagIds?: string[]; // Added
   rewrittenStoryText?: string;
   pages: StoryPage[];
   createdAt: Date | Timestamp;
@@ -37,7 +39,8 @@ export const storyCreationSchema = z.object({
   storyPrompt: z.string().min(10, { message: "Story prompt must be at least 10 characters long." }).max(2000, { message: "Story prompt must be less than 2000 characters." }),
   childAge: z.coerce.number().min(1, { message: "Child's age must be at least 1." }).max(12, { message: "Child's age must be 12 or younger." }),
   voiceGender: z.enum(['male', 'female'], { message: "Please select a voice gender." }),
-  storyStyleDescription: z.string().max(1000, { message: "Style description is too long." }).optional(), // Increased max length for full descriptions
+  storyStyleDescription: z.string().max(1000, { message: "Style description is too long." }).optional(),
+  selectedLearningTagIds: z.array(z.string()).optional(), // Added
 });
 
 export type StoryCreationFormData = z.infer<typeof storyCreationSchema>;

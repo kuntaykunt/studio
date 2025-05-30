@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { StoryCreationFormData, storyCreationSchema, StoryPage, Storybook } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox"; // Added
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileText, Image as ImageIcon, AlertTriangle, Save, Mic, Film, Palette } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Image as ImageIcon, AlertTriangle, Save, Mic, Film, Palette, BookOpen } from 'lucide-react';
 import Image from 'next/image';
 import { childSafeStoryGeneration, ChildSafeStoryGenerationInput } from '@/ai/flows/child-safe-story-generation';
 import { generateStoryImages, GenerateStoryImagesInput } from '@/ai/flows/image-generation';
@@ -24,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { addStorybook } from '@/lib/firebase/firestoreService';
 import { useRouter } from 'next/navigation';
 import { visualStyleOptions } from '@/lib/visualStyles';
+import { learningTags, LearningTag } from '@/lib/learningTags'; // Added
 
 type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'voiceoversGenerated' | 'animationsGenerated' | 'saved';
 
@@ -99,7 +101,8 @@ export default function StoryCreatorForm() {
       storyPrompt: '',
       childAge: 5,
       voiceGender: 'female',
-      storyStyleDescription: visualStyleOptions[0].description, // Default to "AI Default" description
+      storyStyleDescription: visualStyleOptions[0].description,
+      selectedLearningTagIds: [], // Added
     },
   });
 
@@ -118,10 +121,18 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(10);
     setOriginalPromptText(data.storyPrompt);
+
+    let learningTagsPromptText = "";
+    if (data.selectedLearningTagIds && data.selectedLearningTagIds.length > 0) {
+        const selectedTagsDetails = learningTags.filter(tag => data.selectedLearningTagIds!.includes(tag.id));
+        learningTagsPromptText = selectedTagsDetails.map(tag => tag.descriptionForPrompt).join("\n");
+    }
+
     try {
       const input: ChildSafeStoryGenerationInput = {
         storyText: data.storyPrompt,
         childAge: data.childAge,
+        learningTagsPromptText: learningTagsPromptText || undefined,
       };
       toast({ title: "Generating child-safe story...", description: "Our AI is crafting a special version for your child." });
       const result = await childSafeStoryGeneration(input);
@@ -176,7 +187,9 @@ export default function StoryCreatorForm() {
         childAge: form.getValues('childAge'),
         storyStyleDescription: form.getValues('storyStyleDescription'),
       };
-      toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s). This may take a moment.` });
+      toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s). This may take some time, up to a minute per page.` });
+      console.log('[StoryCreatorForm] Image Generation Input:', JSON.stringify(input, null, 2).substring(0, 500) + "...");
+
 
       const results = await generateStoryImages(input);
       setOverallProgress(50);
@@ -271,7 +284,7 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithAnimations);
       setOverallProgress(100);
       setCurrentStep('animationsGenerated');
-      toast({ title: "Animations Ready (Placeholders)!", description: "Your story is complete with all elements. You can now save it." });
+      toast({ title: "Animations Setup Complete!", description: "Your story is complete with all elements (animation is a placeholder). You can now save it." });
     } catch (error) {
        console.error("Error during animation placeholder setup:", error);
        toast({ variant: "destructive", title: "Animation Setup Failed", description: (error as Error).message || "An unexpected error occurred." });
@@ -300,6 +313,7 @@ export default function StoryCreatorForm() {
         childAge: formData.childAge,
         voiceGender: formData.voiceGender,
         storyStyleDescription: formData.storyStyleDescription,
+        selectedLearningTagIds: formData.selectedLearningTagIds || [], // Added
         rewrittenStoryText: rewrittenStory,
         pages: storyPages.map(p => ({
             pageNumber: p.pageNumber,
@@ -331,7 +345,8 @@ export default function StoryCreatorForm() {
         storyPrompt: '',
         childAge: 5,
         voiceGender: 'female',
-        storyStyleDescription: visualStyleOptions[0].description, // Reset to default style
+        storyStyleDescription: visualStyleOptions[0].description,
+        selectedLearningTagIds: [], // Added
     });
     setRewrittenStory(null);
     setStoryPages([]);
@@ -386,7 +401,7 @@ export default function StoryCreatorForm() {
                 <CardDescription>
                   {currentStep === 'imagesGenerated' && 'Images generated. Next: voiceovers.'}
                   {currentStep === 'voiceoversGenerated' && 'Voiceovers generated. Next: setup animations.'}
-                  {currentStep === 'animationsGenerated' && 'All elements ready. Review and save!'}
+                  {currentStep === 'animationsGenerated' && 'All elements ready. Review and save! Animation is a placeholder.'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -446,14 +461,14 @@ export default function StoryCreatorForm() {
                                 <p className="text-sm font-medium flex items-center gap-1"><Film className="h-4 w-4"/> Animation:</p>
                                 <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex flex-col items-center justify-center text-muted-foreground border p-2">
                                   <Film className="h-10 w-10 mb-1" /> 
-                                  <span className="text-xs text-center">Animation feature in development. Placeholder was not set.</span>
+                                  <span className="text-xs text-center">Animation feature in development. Placeholder was not set for this page.</span>
                                 </div>
                             </div>
                          )}
                       </>
                     )}
                     {!page.imageUrl && currentStep === 'animationsGenerated' && (
-                         <p className="text-sm text-muted-foreground mt-2"><Film className="inline h-4 w-4 mr-1"/>Animation skipped (no image for this page).</p>
+                         <p className="text-sm text-muted-foreground mt-2"><Film className="inline h-4 w-4 mr-1"/>Animation feature in development. Skipped for this page as there is no image.</p>
                     )}
                   </Card>
                 ))}
@@ -506,7 +521,7 @@ export default function StoryCreatorForm() {
         case 'initial': return 'Generating Story...';
         case 'storyGenerated': return 'Generating Images...';
         case 'imagesGenerated': return 'Generating Voiceovers...';
-        case 'voiceoversGenerated': return 'Setting Up Animations...';
+        case 'voiceoversGenerated': return 'Setting Up Animations (Placeholders)...';
         default: return 'Processing...';
     }
   }
@@ -522,19 +537,69 @@ export default function StoryCreatorForm() {
             <FormField control={form.control} name="storyPrompt" render={({ field }) => (
                 <FormItem><FormLabel htmlFor="storyPrompt" className="text-lg font-semibold">Your Story Idea</FormLabel><FormControl><Input id="storyPrompt" placeholder="Describe scenes or events. AI will rewrite and split into pages." className="text-base h-24" {...field} as="textarea" /></FormControl><FormDescription>AI will rewrite for child-safety and page division.</FormDescription><FormMessage /></FormItem>
             )}/>
+
+            <FormField
+              control={form.control}
+              name="selectedLearningTagIds"
+              render={() => (
+                <FormItem>
+                  <div className="mb-4">
+                    <FormLabel className="text-lg font-semibold flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-muted-foreground" />
+                        Learning Opportunities (Optional)
+                    </FormLabel>
+                    <FormDescription>
+                      Select learning themes to weave into the story.
+                    </FormDescription>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+                    {learningTags.map((tag) => (
+                      <FormField
+                        key={tag.id}
+                        control={form.control}
+                        name="selectedLearningTagIds"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              key={tag.id}
+                              className="flex flex-row items-start space-x-3 space-y-0"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(tag.id)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...(field.value || []), tag.id])
+                                      : field.onChange(
+                                          (field.value || []).filter(
+                                            (value) => value !== tag.id
+                                          )
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="text-sm font-normal leading-snug" title={tag.learningFocus}>
+                                {tag.name}
+                                <p className="text-xs text-muted-foreground">{tag.learningFocus}</p>
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
              <FormField
                 control={form.control}
                 name="storyStyleDescription"
                 render={({ field }) => {
-                  // field.value here is the description string from the form state
-                  // We need to find the corresponding style ID to set as the Select's value
-                  const currentDescription = field.value;
-                  let currentSelectedStyleId = visualStyleOptions.find(opt => opt.description === currentDescription)?.id;
-                  
-                  // If no match or field.value is empty (initial default), use the ID of the first option.
-                  if (!currentSelectedStyleId && visualStyleOptions.length > 0) {
-                    currentSelectedStyleId = visualStyleOptions[0].id;
-                  }
+                  const currentSelectedStyleId = visualStyleOptions.find(opt => opt.description === field.value)?.id || visualStyleOptions[0]?.id;
+                  // console.log(`Current form description: "${field.value ? field.value.substring(0,30) + '...' : ''}", Matched ID: ${currentSelectedStyleId}`);
 
                   return (
                     <FormItem>
@@ -543,13 +608,13 @@ export default function StoryCreatorForm() {
                         Visual Style
                       </FormLabel>
                       <Select
-                        value={currentSelectedStyleId} // Controlled by the ID
-                        onValueChange={(selectedId) => { // This callback receives an ID
+                        value={currentSelectedStyleId} 
+                        onValueChange={(selectedId) => { 
                           const selectedStyle = visualStyleOptions.find(style => style.id === selectedId);
+                          // console.log(`Selected ID: ${selectedId}, Found Style: ${selectedStyle?.name}`);
                           if (selectedStyle) {
-                            field.onChange(selectedStyle.description); // Update form state with the full description
+                            field.onChange(selectedStyle.description); 
                           } else {
-                            // Fallback or error, perhaps set to default description
                             field.onChange(visualStyleOptions[0]?.description || ''); 
                           }
                         }}
@@ -561,16 +626,15 @@ export default function StoryCreatorForm() {
                         </FormControl>
                         <SelectContent>
                           {visualStyleOptions.map((style) => {
-                            // Diagnostic log:
-                            // console.log(`Rendering SelectItem: name="${style.name}", id="${style.id}", description="${style.description ? style.description.substring(0,30) + '...' : ''}"`);
-                            if (!style.id || style.id.trim() === '') {
-                              console.warn("Visual style option has empty ID, skipping:", style);
-                              return null; // Defensive: Do not render SelectItem if ID is empty
-                            }
+                            // if (!style.id || style.id.trim() === '') {
+                            //   console.warn("Visual style option has empty ID, skipping:", style);
+                            //   return null; 
+                            // }
+                            // console.log(`Rendering SelectItem: name="${style.name}", id="${style.id}"`)
                             return (
                               <SelectItem
                                 key={style.id}
-                                value={style.id} // Value must be a non-empty string
+                                value={style.id}
                               >
                                 {style.name}
                               </SelectItem>
@@ -592,7 +656,7 @@ export default function StoryCreatorForm() {
                   <FormItem><FormLabel className="text-lg font-semibold">Voiceover Gender</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex items-center space-x-4 pt-2">
                         <FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="female" id="female" /></FormControl><Label htmlFor="female" className="font-normal text-base">Female</Label></FormItem>
                         <FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="male" id="male" /></FormControl><Label htmlFor="male" className="font-normal text-base">Male</Label></FormItem>
-                  </RadioGroup></FormControl><FormDescription>For voiceover placeholders.</FormDescription><FormMessage /></FormItem>
+                  </RadioGroup></FormControl><FormDescription>For voiceover placeholders/generation.</FormDescription><FormMessage /></FormItem>
               )}/>
             </div>
           </>

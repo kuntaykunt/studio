@@ -42,10 +42,8 @@ import {
  *                           request.resource.data.originalPrompt is string &&
  *                           request.resource.data.voiceGender is string &&
  *                           request.resource.data.rewrittenStoryText is string &&
- *                           (request.resource.data.storyStyleDescription == null || request.resource.data.storyStyleDescription is string); // Added
- *     // Add more specific validation for page fields if needed:
- *     // e.g., request.resource.data.pages[0].pageNumber is number
- *     // request.resource.data.pages[0].text is string
+ *                           (request.resource.data.storyStyleDescription == null || request.resource.data.storyStyleDescription is string) &&
+ *                           (request.resource.data.selectedLearningTagIds == null || request.resource.data.selectedLearningTagIds is list); 
  *   }
  * }
  */
@@ -62,7 +60,8 @@ const fromFirestore = (docSnap: QueryDocumentSnapshot<DocumentData> | DocumentDa
     originalPrompt: data.originalPrompt,
     childAge: data.childAge,
     voiceGender: data.voiceGender,
-    storyStyleDescription: data.storyStyleDescription, // Added
+    storyStyleDescription: data.storyStyleDescription,
+    selectedLearningTagIds: data.selectedLearningTagIds || [], // Added
     rewrittenStoryText: data.rewrittenStoryText,
     pages: (data.pages || []).map((page: any) => ({
       pageNumber: page.pageNumber,
@@ -89,7 +88,8 @@ export async function addStorybook(
   try {
     const docRef = await addDoc(collection(db, STORYBOOKS_COLLECTION), {
       ...storybookData,
-      storyStyleDescription: storybookData.storyStyleDescription || null, // Ensure null if undefined
+      storyStyleDescription: storybookData.storyStyleDescription || null, 
+      selectedLearningTagIds: storybookData.selectedLearningTagIds || [], // Added
       pages: storybookData.pages.map(p => ({
         pageNumber: p.pageNumber,
         text: p.text,
