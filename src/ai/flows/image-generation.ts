@@ -19,6 +19,7 @@ const GenerateStoryImagesInputSchema = z.object({
     })
   ).describe('An array of story pages, each containing the text for that page.'),
   childAge: z.number().describe('The age of the child for whom the story is intended.'),
+  storyStyleDescription: z.string().optional().describe('An optional description of the desired overall art style or main character appearance to maintain consistency across pages.'),
 });
 export type GenerateStoryImagesInput = z.infer<typeof GenerateStoryImagesInputSchema>;
 
@@ -41,18 +42,20 @@ const pageImageMatchCheckPrompt = ai.definePrompt({
     schema: z.object({
       pageText: z.string(),
       childAge: z.number(),
+      storyStyleDescription: z.string().optional(),
     }),
   },
   output: {
     schema: z.object({
-      imageMatchesText: z.boolean().describe("True if a child-friendly, scene-only illustration for the page text would be appropriate, false otherwise. The illustration should not contain any text itself.")
+      imageMatchesText: z.boolean().describe("True if a child-friendly, scene-only illustration for the page text would be appropriate, false otherwise. The illustration should not contain any text itself and should adhere to any provided style description.")
     })
   },
   prompt: `You are an AI assistant evaluating if an image would be appropriate for a children's storybook page.
 The image should be a colorful, whimsical scene-only illustration, appealing to a {{childAge}}-year-old child.
+{{#if storyStyleDescription}}It should also attempt to follow this style guidance: "{{storyStyleDescription}}".{{/if}}
 IMPORTANTLY, the illustration itself MUST NOT contain any text, letters, or words.
 
-Given the following story page text, would such an illustration (scene-only, no text in image, colorful, for a {{childAge}}-year-old) be suitable and accurately represent the text?
+Given the following story page text, would such an illustration be suitable and accurately represent the text?
 
 Story Page Text: {{{pageText}}}
 
@@ -77,12 +80,13 @@ const generateStoryImagesFlow = ai.defineFlow(
   async input => {
     const results = await Promise.all(
       input.storyPages.map(async (page) => {
-        const imageGenPromptText = `A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
-        
+        const stylePrefix = input.storyStyleDescription ? input.storyStyleDescription + ". " : "";
+        const imageGenPromptText = `${stylePrefix}A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
+
         let generatedImageUrl: string | undefined;
         try {
           const {media} = await ai.generate({
-            model: 'googleai/gemini-2.0-flash-exp', 
+            model: 'googleai/gemini-2.0-flash-exp',
             prompt: imageGenPromptText,
             config: {
               responseModalities: ['TEXT', 'IMAGE'],
@@ -99,7 +103,7 @@ const generateStoryImagesFlow = ai.defineFlow(
           console.error(`Image generation failed for page text: "${page.pageText}"`, imageGenError);
           // Keep generatedImageUrl as undefined, schema allows it.
         }
-        
+
 
         // This call now primarily checks if a scene-only image is appropriate for the text.
         let imageMatchesTextResult = false; // Default to false
@@ -107,6 +111,7 @@ const generateStoryImagesFlow = ai.defineFlow(
             const {output: matchOutput} = await pageImageMatchCheckPrompt({
                 pageText: page.pageText,
                 childAge: input.childAge,
+                storyStyleDescription: input.storyStyleDescription,
             });
             imageMatchesTextResult = matchOutput?.imageMatchesText ?? false;
         } catch (matchCheckError) {
@@ -126,4 +131,3 @@ const generateStoryImagesFlow = ai.defineFlow(
     return results;
   }
 );
-

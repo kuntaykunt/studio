@@ -1,5 +1,5 @@
 
-'use server'; 
+'use server';
 
 import { db } from '@/lib/firebase/config';
 import type { Storybook, StoryPage } from '@/lib/types';
@@ -41,7 +41,8 @@ import {
  *                           request.resource.data.userId is string &&
  *                           request.resource.data.originalPrompt is string &&
  *                           request.resource.data.voiceGender is string &&
- *                           request.resource.data.rewrittenStoryText is string;
+ *                           request.resource.data.rewrittenStoryText is string &&
+ *                           (request.resource.data.storyStyleDescription == null || request.resource.data.storyStyleDescription is string); // Added
  *     // Add more specific validation for page fields if needed:
  *     // e.g., request.resource.data.pages[0].pageNumber is number
  *     // request.resource.data.pages[0].text is string
@@ -61,15 +62,16 @@ const fromFirestore = (docSnap: QueryDocumentSnapshot<DocumentData> | DocumentDa
     originalPrompt: data.originalPrompt,
     childAge: data.childAge,
     voiceGender: data.voiceGender,
+    storyStyleDescription: data.storyStyleDescription, // Added
     rewrittenStoryText: data.rewrittenStoryText,
-    pages: (data.pages || []).map((page: any) => ({ 
+    pages: (data.pages || []).map((page: any) => ({
       pageNumber: page.pageNumber,
       text: page.text,
-      transformedDialogue: page.transformedDialogue || undefined, // Added
+      transformedDialogue: page.transformedDialogue || undefined,
       imageUrl: page.imageUrl,
       imageMatchesText: page.imageMatchesText,
-      voiceoverUrl: page.voiceoverUrl, 
-      animationUrl: page.animationUrl, 
+      voiceoverUrl: page.voiceoverUrl,
+      animationUrl: page.animationUrl,
       dataAiHint: page.dataAiHint,
     })) as StoryPage[],
     createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate() : new Date(data.createdAt as string | number | Date),
@@ -87,7 +89,8 @@ export async function addStorybook(
   try {
     const docRef = await addDoc(collection(db, STORYBOOKS_COLLECTION), {
       ...storybookData,
-      pages: storybookData.pages.map(p => ({ 
+      storyStyleDescription: storybookData.storyStyleDescription || null, // Ensure null if undefined
+      pages: storybookData.pages.map(p => ({
         pageNumber: p.pageNumber,
         text: p.text,
         transformedDialogue: p.transformedDialogue || null,
@@ -140,7 +143,7 @@ export async function getStorybookById(storybookId: string, userId: string): Pro
         return storybook;
       } else {
         console.warn(`User ${userId} attempted to access storybook ${storybookId} owned by ${storybook.userId}`);
-        return null; 
+        return null;
       }
     } else {
       return null;

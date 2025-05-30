@@ -7,25 +7,26 @@ export interface StoryPage {
   transformedDialogue?: string; // The dialogue script used for TTS
   imageUrl?: string;
   imageMatchesText?: boolean;
-  voiceoverUrl?: string; 
-  animationUrl?: string; 
+  voiceoverUrl?: string;
+  animationUrl?: string;
   isLoadingImage?: boolean;
   isLoadingVoiceover?: boolean;
   isLoadingAnimation?: boolean;
-  dataAiHint?: string; 
+  dataAiHint?: string;
 }
 
 export interface Storybook {
-  id: string; 
-  userId: string; 
+  id: string;
+  userId: string;
   title: string;
   originalPrompt: string;
   childAge: number;
   voiceGender: 'male' | 'female';
-  rewrittenStoryText?: string; 
+  storyStyleDescription?: string; // Added for image consistency
+  rewrittenStoryText?: string;
   pages: StoryPage[];
-  createdAt: Date | Timestamp; 
-  isLoadingStory?: boolean; 
+  createdAt: Date | Timestamp;
+  isLoadingStory?: boolean;
 }
 
 // Schema for the story creation form
@@ -36,6 +37,7 @@ export const storyCreationSchema = z.object({
   storyPrompt: z.string().min(10, { message: "Story prompt must be at least 10 characters long." }).max(2000, { message: "Story prompt must be less than 2000 characters." }),
   childAge: z.coerce.number().min(1, { message: "Child's age must be at least 1." }).max(12, { message: "Child's age must be 12 or younger." }),
   voiceGender: z.enum(['male', 'female'], { message: "Please select a voice gender." }),
+  storyStyleDescription: z.string().max(300, { message: "Style description must be less than 300 characters." }).optional(), // Added
 });
 
 export type StoryCreationFormData = z.infer<typeof storyCreationSchema>;
@@ -53,6 +55,6 @@ export const signupSchema = z.object({
   confirmPassword: z.string()
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], 
+  path: ["confirmPassword"],
 });
 export type SignupFormData = z.infer<typeof signupSchema>;

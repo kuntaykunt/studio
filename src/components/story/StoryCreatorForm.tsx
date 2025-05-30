@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, FileText, Image as ImageIcon, AlertTriangle, Save, Mic, Film } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Image as ImageIcon, AlertTriangle, Save, Mic, Film, Palette } from 'lucide-react';
 import Image from 'next/image';
 import { childSafeStoryGeneration, ChildSafeStoryGenerationInput } from '@/ai/flows/child-safe-story-generation';
 import { generateStoryImages, GenerateStoryImagesInput } from '@/ai/flows/image-generation';
@@ -47,14 +47,14 @@ function splitStoryIntoPagesBasedOnCharLimit(fullStory: string, childAge: number
     let splitPoint = -1;
     for (let i = Math.min(charLimit, currentStorySegment.length -1) ; i > 0; i--) {
       if (currentStorySegment[i] === '\n' && i > 0 && currentStorySegment[i-1] === '\n') {
-        splitPoint = i + 1; 
+        splitPoint = i + 1;
         break;
       }
     }
     if (splitPoint === -1) {
       for (let i = Math.min(charLimit, currentStorySegment.length -1); i > 0; i--) {
         if (['.', '!', '?'].includes(currentStorySegment[i]) && (i + 1 < currentStorySegment.length && currentStorySegment[i+1] === ' ')) {
-          splitPoint = i + 1; 
+          splitPoint = i + 1;
           break;
         }
       }
@@ -65,7 +65,7 @@ function splitStoryIntoPagesBasedOnCharLimit(fullStory: string, childAge: number
     if (splitPoint === -1 || splitPoint === 0) {
       splitPoint = charLimit;
     }
-    
+
     let pageText = currentStorySegment.substring(0, splitPoint).trim();
     if (pageText.length > 0) {
         pages.push(pageText);
@@ -85,7 +85,7 @@ export default function StoryCreatorForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState<GenerationStep>('initial');
-  
+
   const [originalPromptText, setOriginalPromptText] = useState<string>('');
   const [rewrittenStory, setRewrittenStory] = useState<string | null>(null);
   const [storyPages, setStoryPages] = useState<StoryPage[]>([]);
@@ -98,6 +98,7 @@ export default function StoryCreatorForm() {
       storyPrompt: '',
       childAge: 5,
       voiceGender: 'female',
+      storyStyleDescription: '',
     },
   });
 
@@ -115,7 +116,7 @@ export default function StoryCreatorForm() {
     }
     setIsLoading(true);
     setOverallProgress(10);
-    setOriginalPromptText(data.storyPrompt); 
+    setOriginalPromptText(data.storyPrompt);
     try {
       const input: ChildSafeStoryGenerationInput = {
         storyText: data.storyPrompt,
@@ -123,7 +124,7 @@ export default function StoryCreatorForm() {
       };
       toast({ title: "Generating child-safe story...", description: "Our AI is crafting a special version for your child." });
       const result = await childSafeStoryGeneration(input);
-      setOverallProgress(25); 
+      setOverallProgress(25);
       setRewrittenStory(result.rewrittenStory);
       setCurrentStep('storyGenerated');
       toast({ title: "Story Generated!", description: "The child-safe story is ready. Next: images!" });
@@ -139,13 +140,13 @@ export default function StoryCreatorForm() {
   async function handleImageGeneration() {
     if (!rewrittenStory || !form.getValues('childAge')) return;
     setIsLoading(true);
-    
+
     const pagesText = splitStoryIntoPagesBasedOnCharLimit(rewrittenStory, form.getValues('childAge'));
-    
+
     if (pagesText.length === 0) {
       toast({ variant: "destructive", title: "Error", description: "Rewritten story is empty or could not be split into pages." });
       setIsLoading(false);
-      setOverallProgress(25); 
+      setOverallProgress(25);
       return;
     }
 
@@ -162,19 +163,20 @@ export default function StoryCreatorForm() {
       const input: GenerateStoryImagesInput = {
         storyPages: pagesText.map(text => ({ pageText: text })),
         childAge: form.getValues('childAge'),
+        storyStyleDescription: form.getValues('storyStyleDescription'),
       };
       toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s).` });
-      
+
       const results = await generateStoryImages(input);
-      setOverallProgress(50); 
-      
+      setOverallProgress(50);
+
       const updatedPages = results.map((result, index) => ({
         pageNumber: index + 1,
         text: result.pageText,
         imageUrl: result.imageUrl,
         imageMatchesText: result.imageMatchesText,
         isLoadingImage: false,
-        dataAiHint: initialPages[index].dataAiHint 
+        dataAiHint: initialPages[index].dataAiHint
       }));
       setStoryPages(updatedPages);
       setCurrentStep('imagesGenerated');
@@ -183,8 +185,8 @@ export default function StoryCreatorForm() {
     } catch (error) {
       console.error("Error generating images:", error);
       toast({ variant: "destructive", title: "Error Generating Images", description: "Failed to generate all images." });
-      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); 
-      setOverallProgress(25); 
+      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false })));
+      setOverallProgress(25);
     } finally {
       setIsLoading(false);
     }
@@ -215,14 +217,14 @@ export default function StoryCreatorForm() {
     try {
       const updatedPagesWithVoiceovers = await Promise.all(voiceoverPromises);
       setStoryPages(updatedPagesWithVoiceovers);
-      setOverallProgress(75); 
+      setOverallProgress(75);
       setCurrentStep('voiceoversGenerated');
       toast({ title: "Voiceovers Generated!", description: "Next: animations!" });
     } catch (error) {
        console.error("Error during voiceover generation process:", error);
        toast({ variant: "destructive", title: "Voiceover Generation Failed", description: "An unexpected error occurred during batch voiceover generation." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVoiceover: false })));
-       setOverallProgress(50); 
+       setOverallProgress(50);
     } finally {
       setIsLoading(false);
     }
@@ -236,7 +238,7 @@ export default function StoryCreatorForm() {
     toast({ title: "Generating Animations...", description: "Setting up animations for each page (placeholder)." });
 
     const animationPromises = storyPages.map(async (page) => {
-      if (!page.imageUrl) { 
+      if (!page.imageUrl) {
         return { ...page, isLoadingAnimation: false, animationUrl: undefined };
       }
       const input: GenerateAnimationInput = {
@@ -286,8 +288,9 @@ export default function StoryCreatorForm() {
         originalPrompt: originalPromptText,
         childAge: formData.childAge,
         voiceGender: formData.voiceGender,
+        storyStyleDescription: formData.storyStyleDescription, // Added
         rewrittenStoryText: rewrittenStory,
-        pages: storyPages.map(p => ({ 
+        pages: storyPages.map(p => ({
             pageNumber: p.pageNumber,
             text: p.text, // Original page text
             transformedDialogue: p.transformedDialogue, // Transformed dialogue
@@ -302,7 +305,7 @@ export default function StoryCreatorForm() {
       await addStorybook(user.uid, storybookToSave);
       toast({ title: "Storybook Saved!", description: `"${formData.title}" added to library. Redirecting...` });
       setCurrentStep('saved');
-      router.push('/storybooks'); 
+      router.push('/storybooks');
     } catch (error) {
       console.error("Error saving storybook:", error);
       toast({ variant: "destructive", title: "Save Failed", description: (error as Error).message || "Could not save." });
@@ -310,7 +313,7 @@ export default function StoryCreatorForm() {
       setIsSaving(false);
     }
   }
-  
+
   const resetFormAndState = () => {
     form.reset();
     setRewrittenStory(null);
@@ -380,7 +383,7 @@ export default function StoryCreatorForm() {
                             <pre className="mt-1 p-2 bg-foreground/5 rounded-md whitespace-pre-wrap border text-foreground/70">{page.transformedDialogue}</pre>
                         </details>
                     )}
-                    
+
                     {page.isLoadingImage && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating image...</div>}
                     {page.imageUrl && !page.isLoadingImage && (
                       <div className="my-2">
@@ -401,14 +404,14 @@ export default function StoryCreatorForm() {
                              ) : (
                                <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">Placeholder: {page.voiceoverUrl.substring(0,60)}...</div>
                              )}
-                             {(page.voiceoverUrl.includes('placeholder-audio') || !page.voiceoverUrl.startsWith('data:audio')) && 
+                             {(page.voiceoverUrl.includes('placeholder-audio') || !page.voiceoverUrl.startsWith('data:audio')) &&
                                <p className="text-xs text-muted-foreground mt-1">Actual voice generation is in development. This is a placeholder.</p>}
                            </div>
                         )}
                         {!page.voiceoverUrl && !page.isLoadingVoiceover && <p className="text-sm text-muted-foreground mt-2">No voiceover generated for this page.</p>}
                       </>
                     )}
-                    
+
                     {currentStep === 'animationsGenerated' && page.imageUrl && (
                       <>
                         {page.isLoadingAnimation && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating animation...</div>}
@@ -457,7 +460,7 @@ export default function StoryCreatorForm() {
             </Card>
           </div>
         );
-         case 'saved': 
+         case 'saved':
             return (
                 <Card className="mt-6 text-center">
                     <CardHeader><CardTitle>Storybook Saved!</CardTitle><CardDescription>Redirecting to library...</CardDescription></CardHeader>
@@ -483,13 +486,24 @@ export default function StoryCreatorForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleChildSafeStoryGeneration)} className="space-y-8">
-        {(currentStep === 'initial') && ( 
+        {(currentStep === 'initial') && (
           <>
             <FormField control={form.control} name="title" render={({ field }) => (
                 <FormItem><FormLabel htmlFor="title" className="text-lg font-semibold">Story Title</FormLabel><FormControl><Input id="title" placeholder="e.g., The Brave Little Knight" className="text-base" {...field} /></FormControl><FormDescription>Give your story a catchy title!</FormDescription><FormMessage /></FormItem>
             )}/>
             <FormField control={form.control} name="storyPrompt" render={({ field }) => (
                 <FormItem><FormLabel htmlFor="storyPrompt" className="text-lg font-semibold">Your Story Idea</FormLabel><FormControl><Textarea id="storyPrompt" placeholder="Describe scenes or events. AI will rewrite and split into pages." rows={6} className="text-base" {...field} /></FormControl><FormDescription>AI will rewrite for child-safety and page division.</FormDescription><FormMessage /></FormItem>
+            )}/>
+             <FormField control={form.control} name="storyStyleDescription" render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="storyStyleDescription" className="text-lg font-semibold flex items-center gap-2">
+                    <Palette className="h-5 w-5 text-muted-foreground"/>
+                    Visual Style (Optional)
+                  </FormLabel>
+                  <FormControl><Textarea id="storyStyleDescription" placeholder="e.g., 'Cute cartoon style, main character is a small brown bear with a blue hat' or 'Impressionistic watercolor paintings of magical forests'" rows={3} className="text-base" {...field} /></FormControl>
+                  <FormDescription>Describe the desired art style or main character to help maintain image consistency.</FormDescription>
+                  <FormMessage />
+                </FormItem>
             )}/>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField control={form.control} name="childAge" render={({ field }) => (
@@ -504,7 +518,7 @@ export default function StoryCreatorForm() {
             </div>
           </>
         )}
-        
+
         {(isLoading || isSaving) && overallProgress > 0 && currentStep !== 'saved' && (
             <div className="space-y-2 pt-4">
                 <Label className="text-sm text-muted-foreground">{getProgressLabel()}</Label>
