@@ -121,14 +121,12 @@ export default function StoryCreatorForm() {
     // Mark pages for video loading
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVideo: true })));
 
-    toast({ title: "Generating video clips...", description: "Animating scenes and adding voiceovers. This might take a moment!" });
+    toast({ title: "Preparing video placeholders...", description: "Setting up placeholder video clips for each page." });
 
     const videoPromises = storyPages.map(async (page, index) => {
-      if (!page.imageUrl) return page; // Skip if no image
+      if (!page.imageUrl) return { ...page, isLoadingVideo: false }; // Skip if no image, clear loading
 
       const input: GenerateVideoClipInput = {
-        // IMPORTANT: Passing imageUrl as imageDataUri due to AI flow constraints.
-        // In a real scenario, this would need conversion or the AI flow would accept a URL.
         imageDataUri: page.imageUrl, 
         storyText: page.text,
         voiceGender: form.getValues('voiceGender'),
@@ -137,13 +135,12 @@ export default function StoryCreatorForm() {
       
       try {
         const result = await generateVideoClip(input);
-        // Update progress for each video generated
-        setOverallProgress(prev => prev + (30 / storyPages.length));
+        setOverallProgress(prev => prev + (30 / storyPages.filter(p => p.imageUrl).length)); // Progress only for pages with images
         return { ...page, videoUrl: result.videoDataUri, isLoadingVideo: false };
       } catch (videoError) {
         console.error(`Error generating video for page ${page.pageNumber}:`, videoError);
-        toast({ variant: "destructive", title: `Video Error (Page ${page.pageNumber})`, description: "Could not generate video for this page." });
-        return { ...page, isLoadingVideo: false }; // Clear loading state on error
+        toast({ variant: "destructive", title: `Video Error (Page ${page.pageNumber})`, description: "Could not generate video placeholder for this page." });
+        return { ...page, isLoadingVideo: false };
       }
     });
 
@@ -152,13 +149,12 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithVideos);
       setCurrentStep('videosGenerated');
       setOverallProgress(100);
-      toast({ title: "Videos Generated!", description: "Your story is now fully animated! Enjoy." });
+      toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added. Actual video generation is a feature in development." });
     } catch (error) {
-       console.error("Error during video generation process:", error);
-       toast({ variant: "destructive", title: "Video Generation Failed", description: "An unexpected error occurred." });
-       // Ensure loading states are cleared on general failure
+       console.error("Error during video placeholder generation process:", error);
+       toast({ variant: "destructive", title: "Video Placeholder Generation Failed", description: "An unexpected error occurred." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVideo: false })));
-       setOverallProgress(66); // Revert progress
+       setOverallProgress(66); 
     } finally {
       setIsLoading(false);
     }
@@ -198,7 +194,7 @@ export default function StoryCreatorForm() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><FileText /> Story with Media</CardTitle>
-                <CardDescription>Your story pages with generated images{currentStep === 'videosGenerated' && ' and videos'}.</CardDescription>
+                <CardDescription>Your story pages with generated images{currentStep === 'videosGenerated' && ' and video placeholders'}.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {storyPages.map((page) => (
@@ -218,16 +214,16 @@ export default function StoryCreatorForm() {
 
                     {currentStep === 'videosGenerated' && (
                       <>
-                        {page.isLoadingVideo && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating video...</div>}
+                        {page.isLoadingVideo && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating video placeholder...</div>}
                         {page.videoUrl && !page.isLoadingVideo && (
                            <div className="mt-2">
-                             <p className="text-sm font-medium">Video Clip:</p>
-                             {/* Placeholder for video player. Actual video data URI is a mock. */}
-                             <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground">
+                             <p className="text-sm font-medium">Video Clip (Placeholder):</p>
+                             <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                                <Video className="h-12 w-12" />
                                <span className="ml-2">Video Placeholder</span>
                              </div>
-                             <p className="text-xs text-muted-foreground break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
+                             <p className="text-xs text-muted-foreground mt-1 break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
+                             <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development.</p>
                            </div>
                         )}
                       </>
@@ -239,7 +235,7 @@ export default function StoryCreatorForm() {
                  <CardFooter>
                     <Button onClick={handleVideoGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
-                      Generate Video Clips
+                      Generate Video Placeholders
                     </Button>
                   </CardFooter>
               )}
@@ -299,7 +295,7 @@ export default function StoryCreatorForm() {
                   <FormItem>
                     <FormLabel htmlFor="childAge" className="text-lg font-semibold">Child&apos;s Age</FormLabel>
                     <FormControl>
-                      <Input id="childAge" type="number" min="1" max="12" className="text-base" {...field} />
+                      <Input id="childAge" type="number" min="1" max="12" className="text-base" {...field} onChange={(e) => field.onChange(parseInt(e.target.value,10) || 0)} />
                     </FormControl>
                     <FormDescription>
                       This helps the AI tailor the story&apos;s complexity and themes.
@@ -358,3 +354,5 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
+
+    

@@ -139,12 +139,13 @@ export default function ViewStorybookPage() {
                   )}
                   {page.videoUrl && (
                     <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video Clip:</h3>
+                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video Clip (Placeholder):</h3>
                        <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                            <Video className="h-12 w-12" />
                            <span className="ml-2">Video Placeholder</span>
                        </div>
                        <p className="text-xs text-muted-foreground mt-1 break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
+                       <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development.</p>
                     </div>
                   )}
                 </div>
@@ -170,3 +171,4 @@ export default function ViewStorybookPage() {
   );
 }
 
+    
