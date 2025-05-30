@@ -1,9 +1,9 @@
 
 'use server';
 /**
- * @fileOverview Animation generation flow for creating short animated clips from images.
+ * @fileOverview Animation generation flow for creating short animated video clips from images.
  *
- * - generateAnimation - A function that generates an animation for a given image.
+ * - generateAnimation - A function that generates an animation (video clip) for a given image.
  * - GenerateAnimationInput - The input type for the generateAnimation function.
  * - GenerateAnimationOutput - The return type for the generateAnimation function.
  */
@@ -17,13 +17,13 @@ const GenerateAnimationInputSchema = z.object({
     .describe(
       "The image data URI to animate, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
-  storyText: z.string().describe('The context of the story page text (optional, for animation guidance).'),
-  childAge: z.number().describe('The age of the child for whom the animation is intended.'),
+  storyText: z.string().describe('The context of the story page text (optional, for video guidance).'),
+  childAge: z.number().describe('The age of the child for whom the video clip is intended.'),
 });
 export type GenerateAnimationInput = z.infer<typeof GenerateAnimationInputSchema>;
 
 const GenerateAnimationOutputSchema = z.object({
-  animationDataUri: z.string().describe('The generated animation data URI (e.g., a short GIF or video clip).'),
+  animationDataUri: z.string().describe('The generated animation/video data URI (e.g., a short MP4 or GIF).'),
 });
 export type GenerateAnimationOutput = z.infer<typeof GenerateAnimationOutputSchema>;
 
@@ -35,22 +35,22 @@ const animationGenerationPrompt = ai.definePrompt({
   name: 'animationGenerationPrompt',
   input: {schema: GenerateAnimationInputSchema},
   output: {schema: GenerateAnimationOutputSchema},
-  prompt: `You are an animation expert specializing in creating short, engaging animated clips for children's stories from static images.
+  prompt: `You are a creative video generation expert specializing in producing short, engaging video clips for children's stories from static images and text.
 
-You will receive a static image and optionally the corresponding story text for context. Your task is to create a short, simple animation based on the image.
+You will receive a static image and the corresponding story text for context. Your task is to create a short video clip based on the image, bringing it to life with subtle animations and movements that match the story text.
 
 Input Details:
 - Image: {{media url=imageDataUri}}
-- Story Context (optional): {{{storyText}}}
+- Story Context: {{{storyText}}}
 
-Animation Requirements:
-- The animation should be simple, playful, and visually engaging for a child aged {{{childAge}}}.
-- Consider subtle movements, fades, or zooms that bring the static image to life in a delightful way.
-- The animation should be very short (e.g., a few seconds).
-- The output should be an animation data URI (e.g., GIF or short video format).
-- The animation must not contain any inappropriate or unsafe content.
+Video Clip Requirements:
+- The video clip should be very short (e.g., 3-5 seconds).
+- Style: Visually appealing, colorful, and engaging for a child aged {{{childAge}}}.
+- Animation: Incorporate simple animations like panning, zooming, character wiggles, blinking eyes, or environmental effects (e.g., sparkling stars, rustling leaves) that enhance the story page. The animation should directly relate to the provided image and story context.
+- The output should be a video data URI (e.g., MP4 or GIF format suitable for web).
+- The video must not contain any inappropriate or unsafe content. It should be a scene illustration only, without any added text overlays.
 
-Based on the image, create a simple, child-friendly animation. Return the animation as a data URI.
+Based on the image and story text, generate a short, child-friendly video clip. Return the video clip as a data URI.
 `,
   config: {
     safetySettings: [
@@ -69,12 +69,15 @@ const animationGenerationFlow = ai.defineFlow(
     outputSchema: GenerateAnimationOutputSchema,
   },
   async input => {
-    // const {output} = await animationGenerationPrompt(input); // This would be the call if the model supported direct animation generation.
+    // const {output} = await animationGenerationPrompt(input); // This would be the call if the model supported direct video generation.
     // return output!;
 
-    // For now, since actual animation generation isn't directly implemented/supported, we'll return a placeholder.
-    // Future development would involve configuring appropriate Genkit models 
-    // and updating this flow to call them. The prompt above is structured to guide such a model.
-    return {animationDataUri: 'data:image/gif;base64,placeholder-animation-data'}; // Placeholder (e.g., GIF)
+    // For now, since actual video/animation generation isn't directly implemented/supported via simple ai.generate() for advanced models like Veo,
+    // we'll return a placeholder.
+    // Future development would involve either Genkit supporting such models directly with polling,
+    // or this flow calling an external service that uses the @google/genai SDK.
+    console.log(`Animation generation for age ${input.childAge} with text context "${input.storyText.substring(0,50)}..." and image starting with ${input.imageDataUri.substring(0,50)}... would happen here.`);
+    return {animationDataUri: 'data:video/mp4;base64,placeholder-video-animation-data'}; // Placeholder (e.g., MP4)
   }
 );
+
