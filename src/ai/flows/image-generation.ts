@@ -2,7 +2,8 @@
 'use server';
 
 /**
- * @fileOverview Generates images for each page of a children's story.
+ * @fileOverview Generates images for each page of a children's story,
+ * attempting to use the previous page's image as context for consistency.
  *
  * - generateStoryImages - A function that generates images for each page of a story.
  * - GenerateStoryImagesInput - The input type for the generateStoryImages function.
@@ -77,71 +78,85 @@ const generateStoryImagesFlow = ai.defineFlow(
     inputSchema: GenerateStoryImagesInputSchema,
     outputSchema: GenerateStoryImagesOutputSchema,
   },
-  async input => {
-    console.log('[generateStoryImagesFlow] Starting image generation for input:', JSON.stringify(input, null, 2));
-    const results = await Promise.all(
-      input.storyPages.map(async (page, index) => {
-        const stylePrefix = input.storyStyleDescription ? input.storyStyleDescription + ". " : "";
-        const imageGenPromptText = `${stylePrefix}A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
-        console.log(`[generateStoryImagesFlow] Page ${index + 1} - Image Gen Prompt: "${imageGenPromptText.substring(0, 100)}..."`);
+  async (input: GenerateStoryImagesInput): Promise<GenerateStoryImagesOutput> => {
+    console.log('[generateStoryImagesFlow] Starting sequential image generation for input:', JSON.stringify({ childAge: input.childAge, numPages: input.storyPages.length, style: input.storyStyleDescription}, null, 2));
+    
+    const results: GenerateStoryImagesOutput = [];
+    let previousImageUrl: string | undefined = undefined;
 
-        let generatedImageUrl: string | undefined;
-        try {
-          const {media, text, error} = await ai.generate({
-            model: 'googleai/gemini-2.0-flash-exp',
-            prompt: imageGenPromptText,
-            config: {
-              responseModalities: ['TEXT', 'IMAGE'],
-              safetySettings: [
-                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
-              ],
-            },
+    for (let i = 0; i < input.storyPages.length; i++) {
+      const page = input.storyPages[i];
+      const stylePrefix = input.storyStyleDescription ? input.storyStyleDescription + ". " : "";
+      let generatedImageUrl: string | undefined;
+      let imageGenPromptConfig: string | Array<{text?: string; media?: {url: string}}>;
+
+      if (i === 0 || !previousImageUrl) {
+        // First page or no previous image available (e.g., if previous generation failed)
+        imageGenPromptConfig = `${stylePrefix}A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
+        console.log(`[generateStoryImagesFlow] Page ${i + 1} (New Image) - Image Gen Prompt (text only): "${(typeof imageGenPromptConfig === 'string' ? imageGenPromptConfig : '').substring(0, 150)}..."`);
+      } else {
+        // Subsequent pages, use previous image as context
+        imageGenPromptConfig = [
+          { media: { url: previousImageUrl } }, // Pass the previous image data URI
+          { text: `${stylePrefix}Using the previous image as a starting point, continue the story by illustrating the following scene: "${page.pageText}". The style should remain colorful, whimsical, and appealing to a ${input.childAge}-year-old child, consistent with the previous image. IMPORTANT: DO NOT include any text, letters, or words in the new image. The image should be a scene illustration only, evolving from the previous one.` }
+        ];
+        console.log(`[generateStoryImagesFlow] Page ${i + 1} (Contextual Image) - Using previous image. Text Prompt: "${(imageGenPromptConfig[1].text || '').substring(0,150)}..."`);
+      }
+
+      try {
+        const {media, text, error} = await ai.generate({
+          model: 'googleai/gemini-2.0-flash-exp', // Ensure this model supports image-plus-text input for image output
+          prompt: imageGenPromptConfig,
+          config: {
+            responseModalities: ['TEXT', 'IMAGE'], // Expecting an image and potentially text
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+            ],
+          },
+        });
+
+        console.log(`[generateStoryImagesFlow] Page ${i + 1} - AI.generate response:`, { mediaUrlExists: !!media?.url, text: text, error: error});
+
+        if (error) {
+          console.error(`[generateStoryImagesFlow] Page ${i + 1} - Image generation error from ai.generate:`, error);
+        }
+        if (media?.url) {
+          generatedImageUrl = media.url;
+          previousImageUrl = generatedImageUrl; // Update for the next iteration
+          console.log(`[generateStoryImagesFlow] Page ${i + 1} - Generated image URL (first 100 chars): ${generatedImageUrl.substring(0,100)}...`);
+        } else {
+          console.warn(`[generateStoryImagesFlow] Page ${i + 1} - No media.url received from image generation. Previous image will be reused or generation will be text-only if this is the first image.`);
+           // If an intermediate image fails, the next one will use the *last successful* previousImageUrl
+        }
+      } catch (imageGenError) {
+        console.error(`[generateStoryImagesFlow] Page ${i + 1} - Critical error during image generation for page text: "${page.pageText}"`, imageGenError);
+        // Keep generatedImageUrl as undefined. previousImageUrl remains the last successful one.
+      }
+
+      let imageMatchesTextResult = false;
+      try {
+          const {output: matchOutput} = await pageImageMatchCheckPrompt({
+              pageText: page.pageText,
+              childAge: input.childAge,
+              storyStyleDescription: input.storyStyleDescription,
           });
+          imageMatchesTextResult = matchOutput?.imageMatchesText ?? false;
+          console.log(`[generateStoryImagesFlow] Page ${i + 1} - Image match check result: ${imageMatchesTextResult}`);
+      } catch (matchCheckError) {
+          console.error(`[generateStoryImagesFlow] Page ${i + 1} - Image match check failed for page text: "${page.pageText}"`, matchCheckError);
+      }
 
-          console.log(`[generateStoryImagesFlow] Page ${index + 1} - AI.generate response:`, { media: media, text: text, error: error});
+      results.push({
+        pageText: page.pageText,
+        imageUrl: generatedImageUrl,
+        imageMatchesText: imageMatchesTextResult,
+      });
+    } // End of loop
 
-          if (error) {
-            console.error(`[generateStoryImagesFlow] Page ${index + 1} - Image generation error from ai.generate:`, error);
-          }
-          if (media?.url) {
-            generatedImageUrl = media.url;
-            console.log(`[generateStoryImagesFlow] Page ${index + 1} - Generated image URL (first 100 chars): ${generatedImageUrl.substring(0,100)}...`);
-          } else {
-            console.warn(`[generateStoryImagesFlow] Page ${index + 1} - No media.url received from image generation.`);
-          }
-        } catch (imageGenError) {
-          console.error(`[generateStoryImagesFlow] Page ${index + 1} - Critical error during image generation for page text: "${page.pageText}"`, imageGenError);
-          // Keep generatedImageUrl as undefined, schema allows it.
-        }
-
-
-        // This call now primarily checks if a scene-only image is appropriate for the text.
-        let imageMatchesTextResult = false; // Default to false
-        try {
-            const {output: matchOutput} = await pageImageMatchCheckPrompt({
-                pageText: page.pageText,
-                childAge: input.childAge,
-                storyStyleDescription: input.storyStyleDescription,
-            });
-            imageMatchesTextResult = matchOutput?.imageMatchesText ?? false;
-            console.log(`[generateStoryImagesFlow] Page ${index + 1} - Image match check result: ${imageMatchesTextResult}`);
-        } catch (matchCheckError) {
-            console.error(`[generateStoryImagesFlow] Page ${index + 1} - Image match check failed for page text: "${page.pageText}"`, matchCheckError);
-            // imageMatchesTextResult remains false
-        }
-
-
-        return {
-          pageText: page.pageText,
-          imageUrl: generatedImageUrl,
-          imageMatchesText: imageMatchesTextResult
-        };
-      })
-    );
-    console.log('[generateStoryImagesFlow] Finished image generation. Results:', JSON.stringify(results.map(r => ({ pageText: r.pageText.substring(0,20), imageUrlExists: !!r.imageUrl, imageMatchesText: r.imageMatchesText})), null, 2));
+    console.log('[generateStoryImagesFlow] Finished sequential image generation. Results summary:', JSON.stringify(results.map(r => ({ pageText: r.pageText.substring(0,20), imageUrlExists: !!r.imageUrl, imageMatchesText: r.imageMatchesText})), null, 2));
     return results;
   }
 );
