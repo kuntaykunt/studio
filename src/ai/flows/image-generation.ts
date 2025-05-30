@@ -83,15 +83,10 @@ const generateStoryImagesFlow = ai.defineFlow(
     if (input.storyPages) {
       console.log('[generateStoryImagesFlow] Number of pages to process:', input.storyPages.length);
     }
-    if (input.storyStyleDescription) {
-      console.log('[generateStoryImagesFlow] Style description (first 50 chars):', input.storyStyleDescription.substring(0, 50) + '...');
-    } else {
-      console.log('[generateStoryImagesFlow] No style description provided.');
-    }
+    console.log(`[generateStoryImagesFlow] Provided storyStyleDescription (first 50 chars): "${(input.storyStyleDescription || "").substring(0, 50)}..."`);
+
 
     try {
-      console.log('[generateStoryImagesFlow] Starting sequential image generation for input:', JSON.stringify({ childAge: input.childAge, numPages: input.storyPages.length, style: input.storyStyleDescription ? input.storyStyleDescription.substring(0,50) + '...' : "N/A"}, null, 2));
-      
       const results: GenerateStoryImagesOutput = [];
       let previousImageUrl: string | undefined = undefined;
 
@@ -99,27 +94,42 @@ const generateStoryImagesFlow = ai.defineFlow(
         const page = input.storyPages[i];
         console.log(`[generateStoryImagesFlow] Processing page ${i + 1}/${input.storyPages.length}: "${page.pageText.substring(0,50)}..."`);
 
-        const stylePrefix = input.storyStyleDescription ? input.storyStyleDescription + ". " : "";
-        let generatedImageUrl: string | undefined;
         let imageGenPromptConfig: string | Array<{text?: string; media?: {url: string}}>;
+        const commonInstructions = `IMPORTANT: The image must be a scene illustration only and contain NO text, letters, or words. It should be appealing to a ${input.childAge}-year-old child.`;
 
         if (i === 0 || !previousImageUrl) {
-          imageGenPromptConfig = `${stylePrefix}A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
-          console.log(`[generateStoryImagesFlow] Page ${i + 1} (New Image) - Image Gen Prompt (text only, first 150 chars): "${(typeof imageGenPromptConfig === 'string' ? imageGenPromptConfig : (imageGenPromptConfig as Array<any>)[0]?.text || '').substring(0, 150)}..."`);
+          // First image or previous image generation failed
+          if (input.storyStyleDescription && input.storyStyleDescription.trim() !== '') {
+            imageGenPromptConfig = `${input.storyStyleDescription}. Create a children's storybook illustration depicting the following scene: "${page.pageText}". ${commonInstructions}`;
+          } else {
+            // AI Default style
+            imageGenPromptConfig = `Create a children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful and whimsical. ${commonInstructions}`;
+          }
+          console.log(`[generateStoryImagesFlow] Page ${i + 1} (New Image) - Image Gen Prompt (first 200 chars): "${(imageGenPromptConfig as string).substring(0,200)}..."`);
         } else {
+          // Subsequent images, using previousImageUrl as context
+          let contextualPromptText: string;
+          if (input.storyStyleDescription && input.storyStyleDescription.trim() !== '') {
+            contextualPromptText = `${input.storyStyleDescription}. Using the previous image as a reference, continue the story by illustrating this scene: "${page.pageText}". Maintain visual consistency. ${commonInstructions}`;
+          } else {
+            // AI Default style for contextual image
+            contextualPromptText = `Using the previous image as a reference, continue the story by illustrating this scene: "${page.pageText}". Maintain a colorful and whimsical style, consistent with the previous image. ${commonInstructions}`;
+          }
           imageGenPromptConfig = [
-            { media: { url: previousImageUrl } }, 
-            { text: `${stylePrefix}Using the previous image as a starting point, continue the story by illustrating the following scene: "${page.pageText}". The style should remain colorful, whimsical, and appealing to a ${input.childAge}-year-old child, consistent with the previous image. IMPORTANT: DO NOT include any text, letters, or words in the new image. The image should be a scene illustration only, evolving from the previous one.` }
+            { media: { url: previousImageUrl } },
+            { text: contextualPromptText }
           ];
-          console.log(`[generateStoryImagesFlow] Page ${i + 1} (Contextual Image) - Using previous image. Text Prompt (first 150 chars): "${(imageGenPromptConfig[1].text || '').substring(0,150)}..."`);
+          console.log(`[generateStoryImagesFlow] Page ${i + 1} (Contextual Image) - Text Prompt (first 150 chars): "${contextualPromptText.substring(0,150)}..."`);
         }
 
+
+        let generatedImageUrl: string | undefined;
         try {
-          const {media, text, error: genError} = await ai.generate({
-            model: 'googleai/gemini-2.0-flash-exp', 
+          const {media, text: imageGenTextResponse, error: genError} = await ai.generate({
+            model: 'googleai/gemini-2.0-flash-exp',
             prompt: imageGenPromptConfig,
             config: {
-              responseModalities: ['TEXT', 'IMAGE'], 
+              responseModalities: ['TEXT', 'IMAGE'],
               safetySettings: [
                 { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
                 { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
@@ -129,17 +139,18 @@ const generateStoryImagesFlow = ai.defineFlow(
             },
           });
 
-          console.log(`[generateStoryImagesFlow] Page ${i + 1} - AI.generate response:`, { mediaUrlExists: !!media?.url, textResponse: text ? text.substring(0,100) + '...' : null, errorFromGenerate: genError});
+          console.log(`[generateStoryImagesFlow] Page ${i + 1} - AI.generate response:`, { mediaUrlExists: !!media?.url, textResponse: imageGenTextResponse ? imageGenTextResponse.substring(0,100) + '...' : null, errorFromGenerate: genError});
 
           if (genError) {
             console.error(`[generateStoryImagesFlow] Page ${i + 1} - Image generation error from ai.generate:`, JSON.stringify(genError, null, 2));
           }
-          if (media?.url && typeof media.url === 'string') {
+          if (media?.url && typeof media.url === 'string' && media.url.startsWith('data:image')) {
             generatedImageUrl = media.url;
-            previousImageUrl = generatedImageUrl; 
+            previousImageUrl = generatedImageUrl;
             console.log(`[generateStoryImagesFlow] Page ${i + 1} - Generated image URL (first 100 chars): ${generatedImageUrl.substring(0,100)}...`);
           } else {
-            console.warn(`[generateStoryImagesFlow] Page ${i + 1} - No media.url received or it's not a string. Media object:`, media);
+            console.warn(`[generateStoryImagesFlow] Page ${i + 1} - No valid media.url received or it's not a string/image. Media object:`, media);
+            previousImageUrl = undefined; // Reset if current image gen failed
           }
         } catch (imageGenError: any) {
           let errorMsg = 'Unknown error during single image generation.';
@@ -147,6 +158,7 @@ const generateStoryImagesFlow = ai.defineFlow(
           else if (typeof imageGenError === 'string') errorMsg = imageGenError;
           else { try { errorMsg = JSON.stringify(imageGenError); } catch(e) { errorMsg = "Non-serializable error object in imageGenError."}}
           console.error(`[generateStoryImagesFlow] Page ${i + 1} - Critical error during image generation for page text: "${page.pageText.substring(0,50)}..."`, errorMsg, imageGenError instanceof Error ? imageGenError.stack : '');
+          previousImageUrl = undefined; // Reset if critical error
         }
 
         let imageMatchesTextResult = false;
@@ -199,7 +211,6 @@ const generateStoryImagesFlow = ai.defineFlow(
       }
       console.error(`[generateStoryImagesFlow] CRITICAL UNHANDLED ERROR IN FLOW: ${errorMessage}`, flowError instanceof Error ? flowError.stack : 'No stack available. Raw error object:', flowError);
       
-      // Return a valid output schema indicating failure for all pages
       return input.storyPages.map(page => ({
         pageText: page.pageText,
         imageUrl: undefined,
@@ -208,3 +219,5 @@ const generateStoryImagesFlow = ai.defineFlow(
     }
   }
 );
+
+    
