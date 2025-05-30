@@ -7,7 +7,7 @@ import type { Storybook } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { ArrowLeft, BookOpen, Users, Video, AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, Video, AlertTriangle, Loader2, ShieldAlert, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStorybookById } from '@/lib/firebase/firestoreService';
@@ -19,7 +19,7 @@ export default function ViewStorybookPage() {
   const params = useParams();
   const storybookId = params.id as string;
   
-  const [storybook, setStorybook] = useState<Storybook | null | undefined>(undefined); // undefined for loading state
+  const [storybook, setStorybook] = useState<Storybook | null | undefined>(undefined); 
   const [error, setError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -44,7 +44,7 @@ export default function ViewStorybookPage() {
             });
           } else {
             setError("Storybook not found or you don't have permission to view it.");
-            setStorybook(null); // Explicitly set to null for "not found" state
+            setStorybook(null); 
           }
         } catch (err) {
           console.error("Error fetching storybook:", err);
@@ -87,7 +87,7 @@ export default function ViewStorybookPage() {
         <BookOpen className="mx-auto h-24 w-24 text-destructive mb-6" />
         <h1 className="text-4xl font-bold mb-4">Storybook Not Found</h1>
         <p className="text-xl text-muted-foreground mb-8">
-          Oops! We couldn&apos;t find the storybook you&apos;re looking for, or you don't have permission to view it.
+          Oops! We couldn&apos;t find the storybook you&apos;re looking for, or you don&apos;t have permission to view it.
         </p>
         <Button asChild>
           <Link href="/storybooks">
@@ -116,7 +116,7 @@ export default function ViewStorybookPage() {
         </CardHeader>
         <CardContent className="p-6">
           <h3 className="text-xl font-semibold mb-2 text-foreground/80">Original Prompt:</h3>
-          <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4">{storybook.originalPrompt}</p>
+          <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4 whitespace-pre-wrap">{storybook.originalPrompt}</p>
           
           <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text</h2>
           <pre className="whitespace-pre-wrap font-sans text-base p-4 bg-muted rounded-md max-h-[400px] overflow-y-auto border">
@@ -139,7 +139,7 @@ export default function ViewStorybookPage() {
               <CardContent className="p-6 grid md:grid-cols-2 gap-6 items-start">
                 <div>
                   <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text:</h3>
-                  <p className="text-base leading-relaxed text-foreground/90">{page.text}</p>
+                  <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
                 </div>
                 <div className="space-y-4">
                   {page.imageUrl && (
@@ -149,7 +149,7 @@ export default function ViewStorybookPage() {
                         src={page.imageUrl}
                         alt={`Illustration for page ${page.pageNumber}`}
                         width={400}
-                        height={260}
+                        height={300} // Adjusted height for better aspect ratio if images are typically landscape
                         className="rounded-lg border shadow-md object-cover"
                         data-ai-hint={page.dataAiHint || "story illustration"}
                       />
@@ -165,8 +165,11 @@ export default function ViewStorybookPage() {
                            <Video className="h-12 w-12" />
                            <span className="ml-2">Video Placeholder</span>
                        </div>
-                       <p className="text-xs text-muted-foreground mt-1 break-all">Mock video URI: {page.videoUrl.substring(0,50)}...</p>
-                       <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development. This is a placeholder.</p>
+                       {page.videoUrl.includes("placeholder-video-data") && (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center">
+                            <Info className="h-3 w-3 mr-1 shrink-0"/> Actual video generation is a feature in development. This is a placeholder.
+                        </p>
+                       )}
                     </div>
                   )}
                 </div>

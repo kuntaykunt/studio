@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -34,8 +35,8 @@ export async function generateStoryImages(input: GenerateStoryImagesInput): Prom
   return generateStoryImagesFlow(input);
 }
 
-const pageImageGenerationPrompt = ai.definePrompt({
-  name: 'pageImageGenerationPrompt',
+const pageImageMatchCheckPrompt = ai.definePrompt({
+  name: 'pageImageMatchCheckPrompt',
   input: {
     schema: z.object({
       pageText: z.string(),
@@ -44,39 +45,25 @@ const pageImageGenerationPrompt = ai.definePrompt({
   },
   output: {
     schema: z.object({
-      imageUrl: z.string(),
-      imageMatchesText: z.boolean()
+      imageMatchesText: z.boolean().describe("True if a child-friendly, scene-only illustration for the page text would be appropriate, false otherwise. The illustration should not contain any text itself.")
     })
   },
-  prompt: `You are an AI assistant that generates images for children's storybooks.
+  prompt: `You are an AI assistant evaluating if an image would be appropriate for a children's storybook page.
+The image should be a colorful, whimsical scene-only illustration, appealing to a {{childAge}}-year-old child.
+IMPORTANTLY, the illustration itself MUST NOT contain any text, letters, or words.
 
-  Given the text of a story page and the age of the child, generate an image that is appropriate and relevant.
-  Return also a boolean value that represents whether the generated image matches the story text.
+Given the following story page text, would such an illustration (scene-only, no text in image, colorful, for a {{childAge}}-year-old) be suitable and accurately represent the text?
 
-  The image must be child-safe and appropriate for a child of age {{childAge}}.
+Story Page Text: {{{pageText}}}
 
-  Story Page Text: {{{pageText}}}
-
-  Output the image as a data URI and the match boolean in the output schema.
+Return true for imageMatchesText if it's suitable, false otherwise.
   `,
   config: {
     safetySettings: [
-      {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_ONLY_HIGH',
-      },
-      {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_NONE',
-      },
-      {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-      },
-      {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_LOW_AND_ABOVE',
-      },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
     ],
   },
 });
@@ -89,42 +76,33 @@ const generateStoryImagesFlow = ai.defineFlow(
   },
   async input => {
     const results = await Promise.all(
-      input.storyPages.map(async page => {
+      input.storyPages.map(async (page) => {
+        const imageGenPromptText = `A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
+        
         const {media} = await ai.generate({
-          model: 'googleai/gemini-2.0-flash-exp',
-          prompt: `Generate an image of ${page.pageText}`,
+          model: 'googleai/gemini-2.0-flash-exp', // Ensure this model supports image generation as configured
+          prompt: imageGenPromptText,
           config: {
             responseModalities: ['TEXT', 'IMAGE'],
             safetySettings: [
-              {
-                category: 'HARM_CATEGORY_HATE_SPEECH',
-                threshold: 'BLOCK_ONLY_HIGH',
-              },
-              {
-                category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-                threshold: 'BLOCK_NONE',
-              },
-              {
-                category: 'HARM_CATEGORY_HARASSMENT',
-                threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-              },
-              {
-                category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-                threshold: 'BLOCK_LOW_AND_ABOVE',
-              },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
             ],
           },
         });
 
-        const {output} = await pageImageGenerationPrompt({
+        // This call now primarily checks if a scene-only image is appropriate for the text.
+        const {output: matchOutput} = await pageImageMatchCheckPrompt({
           pageText: page.pageText,
           childAge: input.childAge,
         });
 
         return {
           pageText: page.pageText,
-          imageUrl: media.url,
-          imageMatchesText: output!.imageMatchesText
+          imageUrl: media.url, // The URL from the actual image generation
+          imageMatchesText: matchOutput!.imageMatchesText 
         };
       })
     );

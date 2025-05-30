@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { StoryCreationFormData, storyCreationSchema, StoryPage, Storybook } from '@/lib/types';
@@ -22,10 +22,63 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from '@/contexts/AuthContext';
 import { addStorybook } from '@/lib/firebase/firestoreService';
 import { useRouter } from 'next/navigation';
-import type { Timestamp } from 'firebase/firestore';
-
 
 type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'videosGenerated' | 'saved';
+
+function getCharLimitPerPage(age: number): number {
+  if (age <= 3) return 100; 
+  if (age <= 6) return 200;
+  if (age <= 9) return 300;
+  return 400;
+}
+
+function splitStoryIntoPagesBasedOnCharLimit(fullStory: string, childAge: number): string[] {
+  const charLimit = getCharLimitPerPage(childAge);
+  const pages: string[] = [];
+  let currentStorySegment = fullStory.trim();
+
+  while (currentStorySegment.length > 0) {
+    if (currentStorySegment.length <= charLimit) {
+      pages.push(currentStorySegment);
+      break;
+    }
+
+    let splitPoint = -1;
+    // Try to find a paragraph break (double newline)
+    for (let i = Math.min(charLimit, currentStorySegment.length -1) ; i > 0; i--) {
+      if (currentStorySegment[i] === '\n' && i > 0 && currentStorySegment[i-1] === '\n') {
+        splitPoint = i + 1; // Split after the double newline
+        break;
+      }
+    }
+    // If no paragraph break, try sentence break
+    if (splitPoint === -1) {
+      for (let i = Math.min(charLimit, currentStorySegment.length -1); i > 0; i--) {
+        if (['.', '!', '?'].includes(currentStorySegment[i]) && (i + 1 < currentStorySegment.length && currentStorySegment[i+1] === ' ')) {
+          splitPoint = i + 1; // Split after sentence-ending punctuation
+          break;
+        }
+      }
+    }
+    // If no natural break, find the last space
+    if (splitPoint === -1) {
+      splitPoint = currentStorySegment.lastIndexOf(' ', charLimit);
+    }
+    // If no space found (very long word or no spaces until limit), hard split
+    if (splitPoint === -1 || splitPoint === 0) {
+      splitPoint = charLimit;
+    }
+    
+    let pageText = currentStorySegment.substring(0, splitPoint).trim();
+    if (pageText.length > 0) {
+        pages.push(pageText);
+    }
+    currentStorySegment = currentStorySegment.substring(splitPoint).trimStart();
+  }
+
+  return pages.filter(p => p.length > 0);
+}
+
 
 export default function StoryCreatorForm() {
   const { toast } = useToast();
@@ -36,7 +89,7 @@ export default function StoryCreatorForm() {
   const [isSaving, setIsSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState<GenerationStep>('initial');
   
-  const [originalPrompt, setOriginalPrompt] = useState<string>('');
+  const [originalPromptText, setOriginalPromptText] = useState<string>('');
   const [rewrittenStory, setRewrittenStory] = useState<string | null>(null);
   const [storyPages, setStoryPages] = useState<StoryPage[]>([]);
   const [overallProgress, setOverallProgress] = useState(0);
@@ -51,10 +104,21 @@ export default function StoryCreatorForm() {
     },
   });
 
+  useEffect(() => {
+    if (!authLoading && !user && currentStep !== 'initial') {
+      toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to create stories." });
+      router.push('/login');
+    }
+  }, [user, authLoading, currentStep, router, toast]);
+
   async function handleChildSafeStoryGeneration(data: StoryCreationFormData) {
+    if (!user) {
+      toast({ variant: "destructive", title: "Not Logged In", description: "You must be logged in to generate a story." });
+      return;
+    }
     setIsLoading(true);
     setOverallProgress(10);
-    setOriginalPrompt(data.storyPrompt); // Save original prompt
+    setOriginalPromptText(data.storyPrompt); 
     try {
       const input: ChildSafeStoryGenerationInput = {
         storyText: data.storyPrompt,
@@ -79,10 +143,12 @@ export default function StoryCreatorForm() {
     if (!rewrittenStory || !form.getValues('childAge')) return;
     setIsLoading(true);
     
-    const pagesText = rewrittenStory.split('\\n\\n').map(text => text.trim()).filter(text => text.length > 0);
+    const pagesText = splitStoryIntoPagesBasedOnCharLimit(rewrittenStory, form.getValues('childAge'));
+    
     if (pagesText.length === 0) {
-      toast({ variant: "destructive", title: "Error", description: "Rewritten story is empty or could not be split into pages. Try a longer story or ensure paragraphs are separated by double line breaks." });
+      toast({ variant: "destructive", title: "Error", description: "Rewritten story is empty or could not be split into pages. Try a different story prompt." });
       setIsLoading(false);
+      setOverallProgress(33); // Reset progress if stuck
       return;
     }
 
@@ -90,7 +156,7 @@ export default function StoryCreatorForm() {
       pageNumber: index + 1,
       text: text,
       isLoadingImage: true,
-      dataAiHint: `page ${index + 1} content` 
+      dataAiHint: text.substring(0, 50).split(' ').slice(0,2).join(' ').toLowerCase() || `scene ${index + 1}`
     }));
     setStoryPages(initialPages);
     setOverallProgress(40);
@@ -111,7 +177,7 @@ export default function StoryCreatorForm() {
         imageUrl: result.imageUrl,
         imageMatchesText: result.imageMatchesText,
         isLoadingImage: false,
-        dataAiHint: `page ${index + 1} illustration` 
+        dataAiHint: initialPages[index].dataAiHint // Persist the hint
       }));
       setStoryPages(updatedPages);
       setCurrentStep('imagesGenerated');
@@ -137,7 +203,7 @@ export default function StoryCreatorForm() {
     toast({ title: "Generating Video Placeholders...", description: "Setting up placeholder video clips for each page. Actual video generation is a feature in development." });
 
     const videoPromises = storyPages.map(async (page, index) => {
-      if (!page.imageUrl) {
+      if (!page.imageUrl) { // Skip video if no image
         return { ...page, isLoadingVideo: false, videoUrl: undefined };
       }
 
@@ -150,7 +216,9 @@ export default function StoryCreatorForm() {
       
       try {
         const result = await generateVideoClip(input);
-        setOverallProgress(prev => Math.min(100, prev + (30 / storyPages.filter(p => p.imageUrl).length)));
+        // Dynamically adjust progress per page
+        const progressIncrement = storyPages.filter(p=>p.imageUrl).length > 0 ? (30 / storyPages.filter(p => p.imageUrl).length) : 0;
+        setOverallProgress(prev => Math.min(100, prev + progressIncrement));
         return { ...page, videoUrl: result.videoDataUri, isLoadingVideo: false };
       } catch (videoError) {
         console.error(`Error generating video placeholder for page ${page.pageNumber}:`, videoError);
@@ -162,7 +230,7 @@ export default function StoryCreatorForm() {
       const updatedPagesWithVideos = await Promise.all(videoPromises);
       setStoryPages(updatedPagesWithVideos);
       setCurrentStep('videosGenerated');
-      setOverallProgress(100);
+      setOverallProgress(100); // Mark as 100% after all attempts
       toast({ title: "Video Placeholders Ready!", description: "Placeholder video clips have been added. You can now save your storybook." });
     } catch (error) {
        console.error("Error during video placeholder generation process:", error);
@@ -179,7 +247,7 @@ export default function StoryCreatorForm() {
       toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a storybook." });
       return;
     }
-    if (!rewrittenStory || storyPages.length === 0 || !originalPrompt) {
+    if (!rewrittenStory || storyPages.length === 0 || !originalPromptText) {
        toast({ variant: "destructive", title: "Incomplete Story", description: "Cannot save an incomplete story. Please generate all parts." });
       return;
     }
@@ -188,11 +256,11 @@ export default function StoryCreatorForm() {
       const formData = form.getValues();
       const storybookToSave: Omit<Storybook, 'id' | 'userId' | 'createdAt'> = {
         title: formData.title,
-        originalPrompt: originalPrompt, // Use the saved original prompt
+        originalPrompt: originalPromptText,
         childAge: formData.childAge,
         voiceGender: formData.voiceGender,
         rewrittenStoryText: rewrittenStory,
-        pages: storyPages.map(p => ({ // Remove temporary loading states before saving
+        pages: storyPages.map(p => ({ 
             pageNumber: p.pageNumber,
             text: p.text,
             imageUrl: p.imageUrl,
@@ -202,20 +270,10 @@ export default function StoryCreatorForm() {
         })),
       };
 
-      const newStorybookId = await addStorybook(user.uid, storybookToSave);
-      toast({ title: "Storybook Saved!", description: `"${formData.title}" has been added to your library.` });
+      await addStorybook(user.uid, storybookToSave); // Don't need newStorybookId for now
+      toast({ title: "Storybook Saved!", description: `"${formData.title}" has been added to your library. Redirecting...` });
       setCurrentStep('saved');
-      // Reset for a new story after a brief delay or user action
-      // For now, let's redirect to the library
-      router.push('/storybooks');
-      // Optionally, reset form here or on a "Create Another" button if redirecting to specific story
-      // form.reset();
-      // setRewrittenStory(null);
-      // setStoryPages([]);
-      // setCurrentStep('initial');
-      // setOverallProgress(0);
-
-
+      router.push('/storybooks'); // Navigate to storybooks page
     } catch (error) {
       console.error("Error saving storybook:", error);
       toast({ variant: "destructive", title: "Save Failed", description: (error as Error).message || "Could not save the storybook to your library." });
@@ -230,7 +288,7 @@ export default function StoryCreatorForm() {
     setStoryPages([]);
     setCurrentStep('initial');
     setOverallProgress(0);
-    setOriginalPrompt('');
+    setOriginalPromptText('');
     toast({ title: "New Story Started", description: "The form has been reset. Let's create another magical tale!" });
   };
 
@@ -239,7 +297,7 @@ export default function StoryCreatorForm() {
     if (authLoading) {
       return <div className="flex justify-center items-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading user data...</span></div>;
     }
-    if (!user && currentStep !== 'initial') { // Allow initial form display even if not logged in, but subsequent steps need user
+     if (!user && currentStep !== 'initial') {
         return (
             <Card className="mt-6 text-center">
                 <CardHeader>
@@ -253,10 +311,11 @@ export default function StoryCreatorForm() {
         );
     }
 
+
     switch (currentStep) {
       case 'initial':
         return (
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || !user}>
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || !user || authLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Generate Child-Safe Story
           </Button>
@@ -266,7 +325,7 @@ export default function StoryCreatorForm() {
           <Card className="mt-6 bg-background/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><FileText /> Rewritten Story</CardTitle>
-              <CardDescription>Here is the child-safe version of your story. Review it, then click below to generate images for each page.</CardDescription>
+              <CardDescription>Here is the child-safe version of your story. Review it, then click below to generate images for each page (split by age-appropriate length).</CardDescription>
             </CardHeader>
             <CardContent>
               <pre className="whitespace-pre-wrap font-sans text-sm p-4 bg-muted rounded-md max-h-96 overflow-y-auto border">{rewrittenStory}</pre>
@@ -296,7 +355,7 @@ export default function StoryCreatorForm() {
                 {storyPages.map((page) => (
                   <Card key={page.pageNumber} className="p-4 bg-muted/50">
                     <h3 className="font-semibold text-lg mb-2 text-primary">Page {page.pageNumber}</h3>
-                    <p className="text-foreground/80 mb-3">{page.text}</p>
+                    <p className="text-foreground/80 mb-3 whitespace-pre-wrap">{page.text}</p>
                     
                     {page.isLoadingImage && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating image...</div>}
                     {page.imageUrl && !page.isLoadingImage && (
@@ -323,7 +382,7 @@ export default function StoryCreatorForm() {
                              <p className="text-xs text-muted-foreground mt-1">Note: Actual video generation is a feature in development. This is a placeholder.</p>
                            </div>
                         )}
-                        {!page.videoUrl && !page.isLoadingVideo && <p className="text-sm text-muted-foreground mt-2">No video placeholder for this page.</p>}
+                        {!page.videoUrl && !page.isLoadingVideo && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No video placeholder for this page.</p>}
                       </>
                     )}
                   </Card>
@@ -352,20 +411,15 @@ export default function StoryCreatorForm() {
            
           </div>
         );
-         case 'saved':
+         case 'saved': // This state might be short-lived if we redirect immediately
             return (
                 <Card className="mt-6 text-center">
                     <CardHeader>
                         <CardTitle>Storybook Saved!</CardTitle>
-                        <CardDescription>Your magical story has been saved to your library.</CardDescription>
+                        <CardDescription>Your magical story has been saved. Redirecting to your library...</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <Button onClick={() => router.push('/storybooks')} className="w-full sm:w-auto">
-                            Go to My Storybooks
-                        </Button>
-                        <Button onClick={resetFormAndState} variant="outline" className="w-full sm:w-auto">
-                            Create Another Story
-                        </Button>
+                       <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
                     </CardContent>
                 </Card>
             );
@@ -377,7 +431,7 @@ export default function StoryCreatorForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleChildSafeStoryGeneration)} className="space-y-8">
-        {(currentStep === 'initial' || currentStep === 'saved') && ( // Show form inputs only at initial or after save->reset
+        {(currentStep === 'initial') && ( 
           <>
             <FormField
               control={form.control}
@@ -404,14 +458,14 @@ export default function StoryCreatorForm() {
                   <FormControl>
                     <Textarea
                       id="storyPrompt"
-                      placeholder="e.g., A brave little knight goes on a quest to find a friendly dragon... Try to describe a few different scenes or events!"
+                      placeholder="e.g., A brave little knight goes on a quest to find a friendly dragon... Describe different scenes or events. The AI will rewrite it and split it into pages based on your child's age."
                       rows={6}
                       className="text-base"
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Describe the story you want to create. The AI will rewrite it to be child-safe. Use double line breaks (press Enter twice) to separate ideas for different pages.
+                    Describe the story you want to create. The AI will rewrite it to be child-safe and divide it into pages.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -429,7 +483,7 @@ export default function StoryCreatorForm() {
                       <Input id="childAge" type="number" min="1" max="12" className="text-base" {...field} onChange={(e) => field.onChange(parseInt(e.target.value,10) || 0)} />
                     </FormControl>
                     <FormDescription>
-                      This helps the AI tailor the story&apos;s complexity and themes.
+                      This helps the AI tailor the story&apos;s complexity, page length, and themes.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -481,7 +535,7 @@ export default function StoryCreatorForm() {
                      currentStep === 'storyGenerated' ? 'Generating Images...' : 
                      'Generating Video Placeholders...'}
                 </Label>
-                <Progress value={isSaving ? 50 : overallProgress} className="w-full" /> {/* Show some progress for saving */}
+                <Progress value={isSaving ? 50 : overallProgress} className="w-full" />
                 <p className="text-xs text-muted-foreground text-center">{Math.round(isSaving ? 50 : overallProgress)}% complete</p>
             </div>
         )}
@@ -491,4 +545,3 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
-
