@@ -25,7 +25,7 @@ export type GenerateStoryImagesInput = z.infer<typeof GenerateStoryImagesInputSc
 const GenerateStoryImagesOutputSchema = z.array(
   z.object({
     pageText: z.string().describe('The text content of the story page.'),
-    imageUrl: z.string().describe('The data URI of the generated image for the story page.'),
+    imageUrl: z.string().optional().describe('The data URI of the generated image for the story page, if successful.'),
     imageMatchesText: z.boolean().describe('Whether the generated image appropriately matches the story page text.')
   })
 );
@@ -79,30 +79,46 @@ const generateStoryImagesFlow = ai.defineFlow(
       input.storyPages.map(async (page) => {
         const imageGenPromptText = `A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
         
-        const {media} = await ai.generate({
-          model: 'googleai/gemini-2.0-flash-exp', // Ensure this model supports image generation as configured
-          prompt: imageGenPromptText,
-          config: {
-            responseModalities: ['TEXT', 'IMAGE'],
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
-            ],
-          },
-        });
+        let generatedImageUrl: string | undefined;
+        try {
+          const {media} = await ai.generate({
+            model: 'googleai/gemini-2.0-flash-exp', 
+            prompt: imageGenPromptText,
+            config: {
+              responseModalities: ['TEXT', 'IMAGE'],
+              safetySettings: [
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+              ],
+            },
+          });
+          generatedImageUrl = media?.url;
+        } catch (imageGenError) {
+          console.error(`Image generation failed for page text: "${page.pageText}"`, imageGenError);
+          // Keep generatedImageUrl as undefined, schema allows it.
+        }
+        
 
         // This call now primarily checks if a scene-only image is appropriate for the text.
-        const {output: matchOutput} = await pageImageMatchCheckPrompt({
-          pageText: page.pageText,
-          childAge: input.childAge,
-        });
+        let imageMatchesTextResult = false; // Default to false
+        try {
+            const {output: matchOutput} = await pageImageMatchCheckPrompt({
+                pageText: page.pageText,
+                childAge: input.childAge,
+            });
+            imageMatchesTextResult = matchOutput?.imageMatchesText ?? false;
+        } catch (matchCheckError) {
+            console.error(`Image match check failed for page text: "${page.pageText}"`, matchCheckError);
+            // imageMatchesTextResult remains false
+        }
+
 
         return {
           pageText: page.pageText,
-          imageUrl: media.url, // The URL from the actual image generation
-          imageMatchesText: matchOutput!.imageMatchesText 
+          imageUrl: generatedImageUrl,
+          imageMatchesText: imageMatchesTextResult
         };
       })
     );
@@ -110,3 +126,4 @@ const generateStoryImagesFlow = ai.defineFlow(
     return results;
   }
 );
+
