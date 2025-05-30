@@ -6,11 +6,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { StoryCreationFormData, storyCreationSchema, StoryPage, Storybook } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-// import { Textarea } from '@/components/ui/textarea'; // No longer using Textarea for style
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Added Select
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +23,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from '@/contexts/AuthContext';
 import { addStorybook } from '@/lib/firebase/firestoreService';
 import { useRouter } from 'next/navigation';
-import { visualStyleOptions } from '@/lib/visualStyles'; // Import predefined styles
+import { visualStyleOptions } from '@/lib/visualStyles';
 
 type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'voiceoversGenerated' | 'animationsGenerated' | 'saved';
 
@@ -386,7 +385,7 @@ export default function StoryCreatorForm() {
                 <CardTitle className="flex items-center gap-2"><FileText /> Story Preview</CardTitle>
                 <CardDescription>
                   {currentStep === 'imagesGenerated' && 'Images generated. Next: voiceovers.'}
-                  {currentStep === 'voiceoversGenerated' && 'Voiceovers generated. Next: animations.'}
+                  {currentStep === 'voiceoversGenerated' && 'Voiceovers generated. Next: setup animations.'}
                   {currentStep === 'animationsGenerated' && 'All elements ready. Review and save!'}
                 </CardDescription>
               </CardHeader>
@@ -526,30 +525,64 @@ export default function StoryCreatorForm() {
              <FormField
                 control={form.control}
                 name="storyStyleDescription"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel htmlFor="storyStyleDescription" className="text-lg font-semibold flex items-center gap-2">
-                      <Palette className="h-5 w-5 text-muted-foreground"/>
-                      Visual Style
-                    </FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="text-base">
-                          <SelectValue placeholder="Select a visual style" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {visualStyleOptions.map((style) => (
-                          <SelectItem key={style.id} value={style.description} className="text-base">
-                            {style.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Choose a visual style to guide image generation, or select AI Default.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  // field.value here is the description string from the form state
+                  // We need to find the corresponding style ID to set as the Select's value
+                  const currentDescription = field.value;
+                  let currentSelectedStyleId = visualStyleOptions.find(opt => opt.description === currentDescription)?.id;
+                  
+                  // If no match or field.value is empty (initial default), use the ID of the first option.
+                  if (!currentSelectedStyleId && visualStyleOptions.length > 0) {
+                    currentSelectedStyleId = visualStyleOptions[0].id;
+                  }
+
+                  return (
+                    <FormItem>
+                      <FormLabel htmlFor="storyStyleDescription" className="text-lg font-semibold flex items-center gap-2">
+                        <Palette className="h-5 w-5 text-muted-foreground"/>
+                        Visual Style
+                      </FormLabel>
+                      <Select
+                        value={currentSelectedStyleId} // Controlled by the ID
+                        onValueChange={(selectedId) => { // This callback receives an ID
+                          const selectedStyle = visualStyleOptions.find(style => style.id === selectedId);
+                          if (selectedStyle) {
+                            field.onChange(selectedStyle.description); // Update form state with the full description
+                          } else {
+                            // Fallback or error, perhaps set to default description
+                            field.onChange(visualStyleOptions[0]?.description || ''); 
+                          }
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="text-base">
+                            <SelectValue placeholder="Select a visual style" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {visualStyleOptions.map((style) => {
+                            // Diagnostic log:
+                            // console.log(`Rendering SelectItem: name="${style.name}", id="${style.id}", description="${style.description ? style.description.substring(0,30) + '...' : ''}"`);
+                            if (!style.id || style.id.trim() === '') {
+                              console.warn("Visual style option has empty ID, skipping:", style);
+                              return null; // Defensive: Do not render SelectItem if ID is empty
+                            }
+                            return (
+                              <SelectItem
+                                key={style.id}
+                                value={style.id} // Value must be a non-empty string
+                              >
+                                {style.name}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Choose a visual style to guide image generation, or select AI Default.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField control={form.control} name="childAge" render={({ field }) => (
@@ -578,3 +611,6 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
+
+
+    
