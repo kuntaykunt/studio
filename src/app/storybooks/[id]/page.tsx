@@ -14,10 +14,10 @@ import { getStorybookById } from '@/lib/firebase/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
 
-const PLACEHOLDER_ANIMATION_URI = 'data:image/gif;base64,placeholder-animation-data';
+const PLACEHOLDER_ANIMATION_URI_PREFIX = 'data:video/mp4;base64,placeholder-video-animation'; // More specific prefix
 const PLACEHOLDER_AUDIO_PREFIXES = [
-    'data:audio/wav;base64,placeholder-audio', // Covers various error states from generation
-    'data:audio/mp3;base64,placeholder-audio' // In case mp3 placeholders are used
+    'data:audio/wav;base64,placeholder-audio', 
+    'data:audio/mp3;base64,placeholder-audio'
 ];
 
 
@@ -67,8 +67,7 @@ export default function ViewStorybookPage() {
     const link = document.createElement('a');
     link.href = audioDataUri;
     
-    // Extract MIME type to suggest extension, default to .wav
-    let extension = '.wav';
+    let extension = '.wav'; // Default extension
     const mimeMatch = audioDataUri.match(/^data:(audio\/[^;]+);/);
     if (mimeMatch && mimeMatch[1]) {
         const mimeType = mimeMatch[1];
@@ -167,8 +166,15 @@ export default function ViewStorybookPage() {
       {storybook.pages.length > 0 ? (
         <div className="space-y-10">
           {storybook.pages.map((page) => {
-            const isPlaceholderAudio = !page.voiceoverUrl || PLACEHOLDER_AUDIO_PREFIXES.some(prefix => page.voiceoverUrl!.startsWith(prefix));
-            const isPlaceholderAnimation = !page.animationUrl || page.animationUrl === PLACEHOLDER_ANIMATION_URI;
+            // Check if voiceoverUrl is defined and then if it starts with any placeholder prefixes
+            const isPlaceholderAudio = !page.voiceoverUrl || PLACEHOLDER_AUDIO_PREFIXES.some(prefix => page.voiceoverUrl?.startsWith(prefix));
+            // Check if animationUrl is defined and then if it starts with the placeholder prefix
+            const isPlaceholderAnimation = !page.animationUrl || page.animationUrl?.startsWith(PLACEHOLDER_ANIMATION_URI_PREFIX);
+            
+            // For debugging the download button visibility:
+            // if (page.pageNumber === 1) { // Log for the first page only
+            //   console.log(`Page ${page.pageNumber} - voiceoverUrl: ${page.voiceoverUrl}, isPlaceholderAudio: ${isPlaceholderAudio}`);
+            // }
 
             return (
               <Card key={page.pageNumber} className="shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl">
@@ -187,7 +193,7 @@ export default function ViewStorybookPage() {
                     )}
                   </div>
                   <div className="space-y-6"> 
-                    {page.imageUrl && (
+                    {page.imageUrl ? (
                       <div>
                          <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
                         <Image
@@ -202,59 +208,81 @@ export default function ViewStorybookPage() {
                           <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged this image as potentially not matching the text.</p>
                         )}
                       </div>
+                    ) : (
+                       <div>
+                         <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
+                         <div className="w-full aspect-[4/3] bg-muted rounded-lg flex items-center justify-center text-muted-foreground border">
+                           <ImageIcon className="h-12 w-12 opacity-50" />
+                           <span className="ml-2">No image generated</span>
+                         </div>
+                       </div>
                     )}
-                    {page.voiceoverUrl && (
+                    
+                    {page.voiceoverUrl && !isPlaceholderAudio ? (
                        <div>
                          <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
-                         {isPlaceholderAudio ? (
-                           <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
-                              <div className="flex items-center text-primary mb-1">
-                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                 <span>Processing voiceover...</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                  We&apos;ll notify you when it&apos;s ready! (Actual voice generation is a feature in development)
-                              </p>
-                           </div>
-                         ) : (
-                           <div className="flex flex-col gap-2">
-                             <audio controls src={page.voiceoverUrl} className="w-full h-10">
-                                Your browser does not support the audio element.
-                             </audio>
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               onClick={() => handleDownloadAudio(page.voiceoverUrl!, page.pageNumber)}
-                               className="self-start"
-                             >
-                               <Download className="mr-2 h-4 w-4" />
-                               Download Voiceover
-                             </Button>
-                           </div>
-                         )}
+                         <div className="flex flex-col gap-2">
+                           <audio controls src={page.voiceoverUrl} className="w-full h-10">
+                              Your browser does not support the audio element.
+                           </audio>
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             onClick={() => handleDownloadAudio(page.voiceoverUrl!, page.pageNumber)}
+                             className="self-start"
+                           >
+                             <Download className="mr-2 h-4 w-4" />
+                             Download Voiceover
+                           </Button>
+                         </div>
                       </div>
+                    ) : (
+                       <div>
+                         <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
+                         <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                            <div className="flex items-center text-primary mb-1">
+                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                               <span>Processing voiceover...</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Actual voice generation is in development or encountered an issue. This is a placeholder.
+                            </p>
+                         </div>
+                       </div>
                     )}
-                     {page.animationUrl && page.imageUrl && ( 
+
+                     {page.animationUrl && page.imageUrl ? ( 
                       <div>
                          <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
                          {isPlaceholderAnimation ? (
                            <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
                               <div className="flex items-center text-primary mb-1">
                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                 <span>Processing animation...</span>
+                                 <span>Animation processing...</span>
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                  We&apos;ll notify you when it&apos;s ready! (Actual animation generation is a feature in development)
+                                  Actual animation generation is a feature in development. This is a placeholder.
                               </p>
                            </div>
                          ) : (
+                           // This block would render a real video if isPlaceholderAnimation were false
                            <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
-                               {/* For actual video, replace this div with a <video> tag */}
                                <Film className="h-12 w-12" />
-                               <span className="ml-2">Animation Content</span> 
+                               <span className="ml-2">Animation Content (Not Placeholder)</span> 
                            </div>
                          )}
                       </div>
+                    ) : (
+                       page.imageUrl && ( // Only show "no animation" if there was an image to animate
+                         <div>
+                           <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
+                            <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                                <p className="text-xs text-muted-foreground">
+                                    Animation placeholder not set or feature in development.
+                                </p>
+                            </div>
+                         </div>
+                       )
                     )}
                   </div>
                 </CardContent>
@@ -279,6 +307,3 @@ export default function ViewStorybookPage() {
     </div>
   );
 }
-
-
-    

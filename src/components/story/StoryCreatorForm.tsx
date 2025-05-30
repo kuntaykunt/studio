@@ -45,35 +45,39 @@ function splitStoryIntoPagesBasedOnCharLimit(fullStory: string, childAge: number
     }
 
     let splitPoint = -1;
+    // Prefer splitting at double newlines (paragraph breaks)
     for (let i = Math.min(charLimit, currentStorySegment.length -1) ; i > 0; i--) {
       if (currentStorySegment[i] === '\n' && i > 0 && currentStorySegment[i-1] === '\n') {
-        splitPoint = i + 1;
+        splitPoint = i + 1; // Keep the newline as part of the previous page or ensure it's not the start of the next
         break;
       }
     }
+     // If no double newline, try sentence endings
     if (splitPoint === -1) {
       for (let i = Math.min(charLimit, currentStorySegment.length -1); i > 0; i--) {
         if (['.', '!', '?'].includes(currentStorySegment[i]) && (i + 1 < currentStorySegment.length && currentStorySegment[i+1] === ' ')) {
-          splitPoint = i + 1;
+          splitPoint = i + 2; // Split after the space following sentence end
           break;
         }
       }
     }
+    // If still no good split point, try the last space within the limit
     if (splitPoint === -1) {
       splitPoint = currentStorySegment.lastIndexOf(' ', charLimit);
     }
+    // If no space found (very long word or no spaces), force split at charLimit
     if (splitPoint === -1 || splitPoint === 0) {
       splitPoint = charLimit;
     }
 
     let pageText = currentStorySegment.substring(0, splitPoint).trim();
-    if (pageText.length > 0) {
+    if (pageText.length > 0) { // Ensure no empty pages are added
         pages.push(pageText);
     }
     currentStorySegment = currentStorySegment.substring(splitPoint).trimStart();
   }
 
-  return pages.filter(p => p.length > 0);
+  return pages.filter(p => p.length > 0); // Final filter for any empty pages due to trimming logic
 }
 
 
@@ -125,6 +129,15 @@ export default function StoryCreatorForm() {
       toast({ title: "Generating child-safe story...", description: "Our AI is crafting a special version for your child." });
       const result = await childSafeStoryGeneration(input);
       setOverallProgress(25);
+
+      if (result.rewrittenStory.startsWith("Error: AI could not generate")) {
+         toast({ variant: "destructive", title: "Story Generation Issue", description: result.rewrittenStory });
+         setRewrittenStory(null);
+         setCurrentStep('initial');
+         setOverallProgress(0);
+         setIsLoading(false);
+         return;
+      }
       setRewrittenStory(result.rewrittenStory);
       setCurrentStep('storyGenerated');
       toast({ title: "Story Generated!", description: "The child-safe story is ready. Next: images!" });
@@ -132,6 +145,7 @@ export default function StoryCreatorForm() {
       console.error("Error generating child-safe story:", error);
       toast({ variant: "destructive", title: "Error", description: "Failed to generate story. Please try again." });
       setOverallProgress(0);
+      setCurrentStep('initial');
     } finally {
       setIsLoading(false);
     }
@@ -184,9 +198,9 @@ export default function StoryCreatorForm() {
 
     } catch (error) {
       console.error("Error generating images:", error);
-      toast({ variant: "destructive", title: "Error Generating Images", description: "Failed to generate all images." });
-      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false })));
-      setOverallProgress(25);
+      toast({ variant: "destructive", title: "Error Generating Images", description: (error as Error).message || "Failed to generate all images." });
+      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); // Mark all as not loading
+      setOverallProgress(25); // Revert progress
     } finally {
       setIsLoading(false);
     }
@@ -222,7 +236,7 @@ export default function StoryCreatorForm() {
       toast({ title: "Voiceovers Generated!", description: "Next: animations!" });
     } catch (error) {
        console.error("Error during voiceover generation process:", error);
-       toast({ variant: "destructive", title: "Voiceover Generation Failed", description: "An unexpected error occurred during batch voiceover generation." });
+       toast({ variant: "destructive", title: "Voiceover Generation Failed", description: (error as Error).message || "An unexpected error occurred during batch voiceover generation." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVoiceover: false })));
        setOverallProgress(50);
     } finally {
@@ -235,22 +249,24 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(80);
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingAnimation: true })));
-    toast({ title: "Generating Animations...", description: "Setting up animations for each page (placeholder)." });
+    toast({ title: "Preparing Animations...", description: "Animation placeholders are being set up." });
 
     const animationPromises = storyPages.map(async (page) => {
       if (!page.imageUrl) {
+        // No image, so no animation can be based on it.
         return { ...page, isLoadingAnimation: false, animationUrl: undefined };
       }
       const input: GenerateAnimationInput = {
-        imageDataUri: page.imageUrl,
+        imageDataUri: page.imageUrl, // This is required
         storyText: page.text,
         childAge: form.getValues('childAge'),
       };
       try {
+        // This flow currently returns a placeholder.
         const result = await generateAnimation(input);
         return { ...page, animationUrl: result.animationDataUri, isLoadingAnimation: false };
       } catch (animError) {
-        console.error(`Error generating animation for page ${page.pageNumber}:`, animError);
+        console.error(`Error 'generating' animation placeholder for page ${page.pageNumber}:`, animError);
         return { ...page, isLoadingAnimation: false, animationUrl: undefined };
       }
     });
@@ -260,10 +276,10 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithAnimations);
       setOverallProgress(100);
       setCurrentStep('animationsGenerated');
-      toast({ title: "Animations Ready!", description: "Your story is complete with all elements. You can now save it." });
+      toast({ title: "Animations Ready (Placeholders)!", description: "Your story is complete with all elements. You can now save it." });
     } catch (error) {
-       console.error("Error during animation generation:", error);
-       toast({ variant: "destructive", title: "Animation Generation Failed", description: "An unexpected error occurred." });
+       console.error("Error during animation placeholder setup:", error);
+       toast({ variant: "destructive", title: "Animation Setup Failed", description: (error as Error).message || "An unexpected error occurred." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingAnimation: false })));
        setOverallProgress(75);
     } finally {
@@ -288,12 +304,12 @@ export default function StoryCreatorForm() {
         originalPrompt: originalPromptText,
         childAge: formData.childAge,
         voiceGender: formData.voiceGender,
-        storyStyleDescription: formData.storyStyleDescription, // Added
+        storyStyleDescription: formData.storyStyleDescription,
         rewrittenStoryText: rewrittenStory,
         pages: storyPages.map(p => ({
             pageNumber: p.pageNumber,
-            text: p.text, // Original page text
-            transformedDialogue: p.transformedDialogue, // Transformed dialogue
+            text: p.text, 
+            transformedDialogue: p.transformedDialogue, 
             imageUrl: p.imageUrl,
             imageMatchesText: p.imageMatchesText,
             voiceoverUrl: p.voiceoverUrl,
@@ -379,8 +395,8 @@ export default function StoryCreatorForm() {
                     <p className="text-foreground/80 mb-1 whitespace-pre-wrap">Original Text: {page.text}</p>
                     {page.transformedDialogue && (
                         <details className="mb-3 text-xs">
-                            <summary className="cursor-pointer text-muted-foreground">View Dialogue Script Used for TTS</summary>
-                            <pre className="mt-1 p-2 bg-foreground/5 rounded-md whitespace-pre-wrap border text-foreground/70">{page.transformedDialogue}</pre>
+                            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Dialogue Script Used for TTS</summary>
+                            <pre className="mt-1 p-2 bg-foreground/5 rounded-md whitespace-pre-wrap border text-foreground/70 max-h-32 overflow-y-auto">{page.transformedDialogue}</pre>
                         </details>
                     )}
 
@@ -391,7 +407,7 @@ export default function StoryCreatorForm() {
                         {!page.imageMatchesText && <p className="text-xs text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> AI flagged image match.</p>}
                       </div>
                     )}
-                    {!page.imageUrl && !page.isLoadingImage && <p className="text-sm text-muted-foreground">No image.</p>}
+                    {!page.imageUrl && !page.isLoadingImage && <p className="text-sm text-destructive">Image generation failed for this page.</p>}
 
                     {(currentStep === 'voiceoversGenerated' || currentStep === 'animationsGenerated') && (
                       <>
@@ -402,10 +418,10 @@ export default function StoryCreatorForm() {
                              {page.voiceoverUrl.startsWith('data:audio') ? (
                                 <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">Your browser does not support the audio element.</audio>
                              ) : (
-                               <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">Placeholder: {page.voiceoverUrl.substring(0,60)}...</div>
+                               <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">Voiceover processing or failed. URI: {page.voiceoverUrl.substring(0,100)}...</div>
                              )}
                              {(page.voiceoverUrl.includes('placeholder-audio') || !page.voiceoverUrl.startsWith('data:audio')) &&
-                               <p className="text-xs text-muted-foreground mt-1">Actual voice generation is in development. This is a placeholder.</p>}
+                               <p className="text-xs text-muted-foreground mt-1">Actual voice generation is in development. This is a placeholder or an error occurred.</p>}
                            </div>
                         )}
                         {!page.voiceoverUrl && !page.isLoadingVoiceover && <p className="text-sm text-muted-foreground mt-2">No voiceover generated for this page.</p>}
@@ -414,18 +430,21 @@ export default function StoryCreatorForm() {
 
                     {currentStep === 'animationsGenerated' && page.imageUrl && (
                       <>
-                        {page.isLoadingAnimation && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating animation...</div>}
+                        {page.isLoadingAnimation && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Setting up animation...</div>}
                         {page.animationUrl && !page.isLoadingAnimation && (
                            <div className="mt-2">
                              <p className="text-sm font-medium flex items-center gap-1"><Film className="h-4 w-4"/> Animation:</p>
-                             <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
-                               <Film className="h-10 w-10" /> <span className="ml-2">Animation Placeholder</span>
+                             <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex flex-col items-center justify-center text-muted-foreground border p-2">
+                               <Film className="h-10 w-10 mb-1" /> 
+                               <span className="text-xs text-center">Animation feature in development. Placeholder set.</span>
                              </div>
-                             <p className="text-xs text-muted-foreground mt-1">Actual animation generation is in development.</p>
                            </div>
                         )}
-                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No animation (placeholder).</p>}
+                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No animation placeholder set.</p>}
                       </>
+                    )}
+                    {!page.imageUrl && currentStep === 'animationsGenerated' && (
+                         <p className="text-sm text-muted-foreground mt-2"><Film className="inline h-4 w-4 mr-1"/>Animation skipped (no image).</p>
                     )}
                   </Card>
                 ))}
@@ -440,9 +459,9 @@ export default function StoryCreatorForm() {
               )}
               {currentStep === 'voiceoversGenerated' && (
                  <CardFooter>
-                    <Button onClick={handleAnimationGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || storyPages.length === 0 || !storyPages.some(p => p.imageUrl)}>
+                    <Button onClick={handleAnimationGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || storyPages.length === 0}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
-                      Generate Animations
+                      Setup Animations (Placeholders)
                     </Button>
                   </CardFooter>
               )}
@@ -478,7 +497,7 @@ export default function StoryCreatorForm() {
         case 'initial': return 'Generating Story...';
         case 'storyGenerated': return 'Generating Images...';
         case 'imagesGenerated': return 'Generating Voiceovers...';
-        case 'voiceoversGenerated': return 'Generating Animations...';
+        case 'voiceoversGenerated': return 'Setting Up Animations...';
         default: return 'Processing...';
     }
   }
@@ -532,3 +551,4 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
+

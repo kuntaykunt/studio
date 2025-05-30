@@ -78,14 +78,16 @@ const generateStoryImagesFlow = ai.defineFlow(
     outputSchema: GenerateStoryImagesOutputSchema,
   },
   async input => {
+    console.log('[generateStoryImagesFlow] Starting image generation for input:', JSON.stringify(input, null, 2));
     const results = await Promise.all(
-      input.storyPages.map(async (page) => {
+      input.storyPages.map(async (page, index) => {
         const stylePrefix = input.storyStyleDescription ? input.storyStyleDescription + ". " : "";
         const imageGenPromptText = `${stylePrefix}A children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful, whimsical, and appealing to a ${input.childAge}-year-old child. IMPORTANT: DO NOT include any text, letters, or words in the image. The image should be a scene illustration only.`;
+        console.log(`[generateStoryImagesFlow] Page ${index + 1} - Image Gen Prompt: "${imageGenPromptText.substring(0, 100)}..."`);
 
         let generatedImageUrl: string | undefined;
         try {
-          const {media} = await ai.generate({
+          const {media, text, error} = await ai.generate({
             model: 'googleai/gemini-2.0-flash-exp',
             prompt: imageGenPromptText,
             config: {
@@ -98,9 +100,20 @@ const generateStoryImagesFlow = ai.defineFlow(
               ],
             },
           });
-          generatedImageUrl = media?.url;
+
+          console.log(`[generateStoryImagesFlow] Page ${index + 1} - AI.generate response:`, { media: media, text: text, error: error});
+
+          if (error) {
+            console.error(`[generateStoryImagesFlow] Page ${index + 1} - Image generation error from ai.generate:`, error);
+          }
+          if (media?.url) {
+            generatedImageUrl = media.url;
+            console.log(`[generateStoryImagesFlow] Page ${index + 1} - Generated image URL (first 100 chars): ${generatedImageUrl.substring(0,100)}...`);
+          } else {
+            console.warn(`[generateStoryImagesFlow] Page ${index + 1} - No media.url received from image generation.`);
+          }
         } catch (imageGenError) {
-          console.error(`Image generation failed for page text: "${page.pageText}"`, imageGenError);
+          console.error(`[generateStoryImagesFlow] Page ${index + 1} - Critical error during image generation for page text: "${page.pageText}"`, imageGenError);
           // Keep generatedImageUrl as undefined, schema allows it.
         }
 
@@ -114,8 +127,9 @@ const generateStoryImagesFlow = ai.defineFlow(
                 storyStyleDescription: input.storyStyleDescription,
             });
             imageMatchesTextResult = matchOutput?.imageMatchesText ?? false;
+            console.log(`[generateStoryImagesFlow] Page ${index + 1} - Image match check result: ${imageMatchesTextResult}`);
         } catch (matchCheckError) {
-            console.error(`Image match check failed for page text: "${page.pageText}"`, matchCheckError);
+            console.error(`[generateStoryImagesFlow] Page ${index + 1} - Image match check failed for page text: "${page.pageText}"`, matchCheckError);
             // imageMatchesTextResult remains false
         }
 
@@ -127,7 +141,8 @@ const generateStoryImagesFlow = ai.defineFlow(
         };
       })
     );
-
+    console.log('[generateStoryImagesFlow] Finished image generation. Results:', JSON.stringify(results.map(r => ({ pageText: r.pageText.substring(0,20), imageUrlExists: !!r.imageUrl, imageMatchesText: r.imageMatchesText})), null, 2));
     return results;
   }
 );
+
