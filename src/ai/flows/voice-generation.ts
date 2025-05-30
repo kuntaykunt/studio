@@ -11,16 +11,16 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { transformTextToDialogue, DialogueTransformationInput } from './dialogue-transformation'; // Import the new flow
+import { transformTextToDialogue, type DialogueTransformationInput } from './dialogue-transformation'; // Import the new flow
 
-export const GenerateVoiceoverInputSchema = z.object({
+const GenerateVoiceoverInputSchema = z.object({
   storyText: z.string().describe('The original text for the story page voiceover.'),
   voiceGender: z.enum(['male', 'female']).describe('The gender of the voiceover.'),
   childAge: z.number().describe('The age of the child for whom the story is intended, to tailor voice style.'),
 });
 export type GenerateVoiceoverInput = z.infer<typeof GenerateVoiceoverInputSchema>;
 
-export const GenerateVoiceoverOutputSchema = z.object({
+const GenerateVoiceoverOutputSchema = z.object({
   audioDataUri: z.string().describe('The generated audio data URI for the voiceover.'),
   transformedDialogue: z.string().optional().describe('The dialogue script used for TTS.'),
 });
