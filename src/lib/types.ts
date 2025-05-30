@@ -3,28 +3,29 @@ import type { Timestamp } from 'firebase/firestore';
 
 export interface StoryPage {
   pageNumber: number;
-  text: string;
+  text: string; // Original page text
+  transformedDialogue?: string; // The dialogue script used for TTS
   imageUrl?: string;
   imageMatchesText?: boolean;
-  voiceoverUrl?: string; // Placeholder for voiceover audio data URI or URL
-  animationUrl?: string; // Placeholder for animation data URI or URL
+  voiceoverUrl?: string; 
+  animationUrl?: string; 
   isLoadingImage?: boolean;
   isLoadingVoiceover?: boolean;
   isLoadingAnimation?: boolean;
-  dataAiHint?: string; // For individual page images
+  dataAiHint?: string; 
 }
 
 export interface Storybook {
-  id: string; // Firestore document ID
-  userId: string; // Firebase Auth User UID
+  id: string; 
+  userId: string; 
   title: string;
   originalPrompt: string;
   childAge: number;
   voiceGender: 'male' | 'female';
-  rewrittenStoryText?: string; // The full rewritten story
+  rewrittenStoryText?: string; 
   pages: StoryPage[];
-  createdAt: Date | Timestamp; // Stored as Firestore Timestamp, used as Date in app
-  isLoadingStory?: boolean; // for the initial story generation
+  createdAt: Date | Timestamp; 
+  isLoadingStory?: boolean; 
 }
 
 // Schema for the story creation form
@@ -52,7 +53,6 @@ export const signupSchema = z.object({
   confirmPassword: z.string()
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], // path of error
+  path: ["confirmPassword"], 
 });
 export type SignupFormData = z.infer<typeof signupSchema>;
-

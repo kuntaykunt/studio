@@ -17,7 +17,7 @@ import { Loader2, Sparkles, FileText, Image as ImageIcon, AlertTriangle, Save, M
 import Image from 'next/image';
 import { childSafeStoryGeneration, ChildSafeStoryGenerationInput } from '@/ai/flows/child-safe-story-generation';
 import { generateStoryImages, GenerateStoryImagesInput } from '@/ai/flows/image-generation';
-import { generateVoiceover, GenerateVoiceoverInput } from '@/ai/flows/voice-generation';
+import { generateVoiceover, GenerateVoiceoverInput, GenerateVoiceoverOutput } from '@/ai/flows/voice-generation';
 import { generateAnimation, GenerateAnimationInput } from '@/ai/flows/animation-generation';
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from '@/contexts/AuthContext';
@@ -123,7 +123,7 @@ export default function StoryCreatorForm() {
       };
       toast({ title: "Generating child-safe story...", description: "Our AI is crafting a special version for your child." });
       const result = await childSafeStoryGeneration(input);
-      setOverallProgress(25); // Adjusted for more steps
+      setOverallProgress(25); 
       setRewrittenStory(result.rewrittenStory);
       setCurrentStep('storyGenerated');
       toast({ title: "Story Generated!", description: "The child-safe story is ready. Next: images!" });
@@ -166,7 +166,7 @@ export default function StoryCreatorForm() {
       toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s).` });
       
       const results = await generateStoryImages(input);
-      setOverallProgress(50); // Adjusted
+      setOverallProgress(50); 
       
       const updatedPages = results.map((result, index) => ({
         pageNumber: index + 1,
@@ -178,7 +178,7 @@ export default function StoryCreatorForm() {
       }));
       setStoryPages(updatedPages);
       setCurrentStep('imagesGenerated');
-      toast({ title: "Images Generated!", description: `Beautiful images are ready. Next: voiceover placeholders!` });
+      toast({ title: "Images Generated!", description: `Beautiful images are ready. Next: voiceovers!` });
 
     } catch (error) {
       console.error("Error generating images:", error);
@@ -195,32 +195,32 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(55);
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVoiceover: true })));
-    toast({ title: "Generating Voiceover Placeholders...", description: "Setting up placeholder voiceovers. Actual voice generation is in development." });
+    toast({ title: "Generating Voiceovers...", description: "AI is preparing voiceovers for each page." });
 
     const voiceoverPromises = storyPages.map(async (page) => {
       const input: GenerateVoiceoverInput = {
-        storyText: page.text,
+        storyText: page.text, // Original page text for dialogue transformation
         voiceGender: form.getValues('voiceGender'),
         childAge: form.getValues('childAge'),
       };
       try {
-        const result = await generateVoiceover(input);
-        return { ...page, voiceoverUrl: result.audioDataUri, isLoadingVoiceover: false };
+        const result: GenerateVoiceoverOutput = await generateVoiceover(input);
+        return { ...page, voiceoverUrl: result.audioDataUri, transformedDialogue: result.transformedDialogue, isLoadingVoiceover: false };
       } catch (voiceError) {
         console.error(`Error generating voiceover for page ${page.pageNumber}:`, voiceError);
-        return { ...page, isLoadingVoiceover: false, voiceoverUrl: undefined };
+        return { ...page, isLoadingVoiceover: false, voiceoverUrl: undefined, transformedDialogue: `Narrator: ${page.text}` }; // Fallback dialogue
       }
     });
 
     try {
       const updatedPagesWithVoiceovers = await Promise.all(voiceoverPromises);
       setStoryPages(updatedPagesWithVoiceovers);
-      setOverallProgress(75); // Adjusted
+      setOverallProgress(75); 
       setCurrentStep('voiceoversGenerated');
-      toast({ title: "Voiceover Placeholders Ready!", description: "Next: animation placeholders!" });
+      toast({ title: "Voiceovers Generated!", description: "Next: animations!" });
     } catch (error) {
-       console.error("Error during voiceover placeholder generation:", error);
-       toast({ variant: "destructive", title: "Voiceover Generation Failed", description: "An unexpected error occurred." });
+       console.error("Error during voiceover generation process:", error);
+       toast({ variant: "destructive", title: "Voiceover Generation Failed", description: "An unexpected error occurred during batch voiceover generation." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVoiceover: false })));
        setOverallProgress(50); 
     } finally {
@@ -233,10 +233,10 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(80);
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingAnimation: true })));
-    toast({ title: "Generating Animation Placeholders...", description: "Setting up placeholder animations. Actual animation generation is in development." });
+    toast({ title: "Generating Animations...", description: "Setting up animations for each page (placeholder)." });
 
     const animationPromises = storyPages.map(async (page) => {
-      if (!page.imageUrl) { // Skip animation if no image
+      if (!page.imageUrl) { 
         return { ...page, isLoadingAnimation: false, animationUrl: undefined };
       }
       const input: GenerateAnimationInput = {
@@ -258,9 +258,9 @@ export default function StoryCreatorForm() {
       setStoryPages(updatedPagesWithAnimations);
       setOverallProgress(100);
       setCurrentStep('animationsGenerated');
-      toast({ title: "Animation Placeholders Ready!", description: "Your story is complete with all placeholders. You can now save it." });
+      toast({ title: "Animations Ready!", description: "Your story is complete with all elements. You can now save it." });
     } catch (error) {
-       console.error("Error during animation placeholder generation:", error);
+       console.error("Error during animation generation:", error);
        toast({ variant: "destructive", title: "Animation Generation Failed", description: "An unexpected error occurred." });
        setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingAnimation: false })));
        setOverallProgress(75);
@@ -289,7 +289,8 @@ export default function StoryCreatorForm() {
         rewrittenStoryText: rewrittenStory,
         pages: storyPages.map(p => ({ 
             pageNumber: p.pageNumber,
-            text: p.text,
+            text: p.text, // Original page text
+            transformedDialogue: p.transformedDialogue, // Transformed dialogue
             imageUrl: p.imageUrl,
             imageMatchesText: p.imageMatchesText,
             voiceoverUrl: p.voiceoverUrl,
@@ -357,23 +358,28 @@ export default function StoryCreatorForm() {
       case 'imagesGenerated':
       case 'voiceoversGenerated':
       case 'animationsGenerated':
-        const isMediaPreview = currentStep === 'imagesGenerated' || currentStep === 'voiceoversGenerated' || currentStep === 'animationsGenerated';
         return (
           <div className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><FileText /> Story Preview</CardTitle>
                 <CardDescription>
-                  {currentStep === 'imagesGenerated' && 'Images generated. Next: voiceover placeholders.'}
-                  {currentStep === 'voiceoversGenerated' && 'Voiceovers generated. Next: animation placeholders.'}
-                  {currentStep === 'animationsGenerated' && 'All placeholders ready. Review and save!'}
+                  {currentStep === 'imagesGenerated' && 'Images generated. Next: voiceovers.'}
+                  {currentStep === 'voiceoversGenerated' && 'Voiceovers generated. Next: animations.'}
+                  {currentStep === 'animationsGenerated' && 'All elements ready. Review and save!'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {storyPages.map((page) => (
                   <Card key={page.pageNumber} className="p-4 bg-muted/50">
                     <h3 className="font-semibold text-lg mb-2 text-primary">Page {page.pageNumber}</h3>
-                    <p className="text-foreground/80 mb-3 whitespace-pre-wrap">{page.text}</p>
+                    <p className="text-foreground/80 mb-1 whitespace-pre-wrap">Original Text: {page.text}</p>
+                    {page.transformedDialogue && (
+                        <details className="mb-3 text-xs">
+                            <summary className="cursor-pointer text-muted-foreground">View Dialogue Script Used for TTS</summary>
+                            <pre className="mt-1 p-2 bg-foreground/5 rounded-md whitespace-pre-wrap border text-foreground/70">{page.transformedDialogue}</pre>
+                        </details>
+                    )}
                     
                     {page.isLoadingImage && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating image...</div>}
                     {page.imageUrl && !page.isLoadingImage && (
@@ -384,21 +390,26 @@ export default function StoryCreatorForm() {
                     )}
                     {!page.imageUrl && !page.isLoadingImage && <p className="text-sm text-muted-foreground">No image.</p>}
 
-                    {currentStep === 'voiceoversGenerated' || currentStep === 'animationsGenerated' ? (
+                    {(currentStep === 'voiceoversGenerated' || currentStep === 'animationsGenerated') && (
                       <>
                         {page.isLoadingVoiceover && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating voiceover...</div>}
                         {page.voiceoverUrl && !page.isLoadingVoiceover && (
                            <div className="mt-2">
                              <p className="text-sm font-medium flex items-center gap-1"><Mic className="h-4 w-4"/> Voiceover:</p>
-                             <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">Placeholder: {page.voiceoverUrl.substring(0,60)}...</div>
-                             <p className="text-xs text-muted-foreground mt-1">Actual voice generation is in development.</p>
+                             {page.voiceoverUrl.startsWith('data:audio') ? (
+                                <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">Your browser does not support the audio element.</audio>
+                             ) : (
+                               <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">Placeholder: {page.voiceoverUrl.substring(0,60)}...</div>
+                             )}
+                             {(page.voiceoverUrl.includes('placeholder-audio') || !page.voiceoverUrl.startsWith('data:audio')) && 
+                               <p className="text-xs text-muted-foreground mt-1">Actual voice generation is in development. This is a placeholder.</p>}
                            </div>
                         )}
-                        {!page.voiceoverUrl && !page.isLoadingVoiceover && <p className="text-sm text-muted-foreground mt-2">No voiceover.</p>}
+                        {!page.voiceoverUrl && !page.isLoadingVoiceover && <p className="text-sm text-muted-foreground mt-2">No voiceover generated for this page.</p>}
                       </>
-                    ) : null}
+                    )}
                     
-                    {currentStep === 'animationsGenerated' && page.imageUrl ? (
+                    {currentStep === 'animationsGenerated' && page.imageUrl && (
                       <>
                         {page.isLoadingAnimation && <div className="flex items-center text-sm text-muted-foreground mt-2"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating animation...</div>}
                         {page.animationUrl && !page.isLoadingAnimation && (
@@ -410,9 +421,9 @@ export default function StoryCreatorForm() {
                              <p className="text-xs text-muted-foreground mt-1">Actual animation generation is in development.</p>
                            </div>
                         )}
-                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No animation.</p>}
+                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No animation (placeholder).</p>}
                       </>
-                    ) : null}
+                    )}
                   </Card>
                 ))}
               </CardContent>
@@ -420,7 +431,7 @@ export default function StoryCreatorForm() {
                  <CardFooter>
                     <Button onClick={handleVoiceoverGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || storyPages.length === 0}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
-                      Generate Voiceover Placeholders
+                      Generate Voiceovers
                     </Button>
                   </CardFooter>
               )}
@@ -428,7 +439,7 @@ export default function StoryCreatorForm() {
                  <CardFooter>
                     <Button onClick={handleAnimationGeneration} className="w-full bg-primary hover:bg-primary/90" disabled={isLoading || storyPages.length === 0 || !storyPages.some(p => p.imageUrl)}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Film className="mr-2 h-4 w-4" />}
-                      Generate Animation Placeholders
+                      Generate Animations
                     </Button>
                   </CardFooter>
               )}

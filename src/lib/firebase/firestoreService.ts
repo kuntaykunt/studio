@@ -15,8 +15,6 @@ import {
   serverTimestamp,
   Timestamp,
   orderBy,
-  // limit, // Not used currently but good for pagination
-  // startAfter, // Not used currently
   DocumentData,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
@@ -39,8 +37,14 @@ import {
  *     // Validate data types and structure
  *     allow create, update: if request.resource.data.title is string &&
  *                           request.resource.data.childAge is number &&
- *                           request.resource.data.pages is list;
- *     // Add more specific validation for page fields if needed
+ *                           request.resource.data.pages is list &&
+ *                           request.resource.data.userId is string &&
+ *                           request.resource.data.originalPrompt is string &&
+ *                           request.resource.data.voiceGender is string &&
+ *                           request.resource.data.rewrittenStoryText is string;
+ *     // Add more specific validation for page fields if needed:
+ *     // e.g., request.resource.data.pages[0].pageNumber is number
+ *     // request.resource.data.pages[0].text is string
  *   }
  * }
  */
@@ -61,10 +65,11 @@ const fromFirestore = (docSnap: QueryDocumentSnapshot<DocumentData> | DocumentDa
     pages: (data.pages || []).map((page: any) => ({ 
       pageNumber: page.pageNumber,
       text: page.text,
+      transformedDialogue: page.transformedDialogue || undefined, // Added
       imageUrl: page.imageUrl,
       imageMatchesText: page.imageMatchesText,
-      voiceoverUrl: page.voiceoverUrl, // Added
-      animationUrl: page.animationUrl, // Added
+      voiceoverUrl: page.voiceoverUrl, 
+      animationUrl: page.animationUrl, 
       dataAiHint: page.dataAiHint,
     })) as StoryPage[],
     createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate() : new Date(data.createdAt as string | number | Date),
@@ -82,9 +87,10 @@ export async function addStorybook(
   try {
     const docRef = await addDoc(collection(db, STORYBOOKS_COLLECTION), {
       ...storybookData,
-      pages: storybookData.pages.map(p => ({ // ensure all fields are explicitly set or undefined
+      pages: storybookData.pages.map(p => ({ 
         pageNumber: p.pageNumber,
         text: p.text,
+        transformedDialogue: p.transformedDialogue || null,
         imageUrl: p.imageUrl || null,
         imageMatchesText: p.imageMatchesText || false,
         voiceoverUrl: p.voiceoverUrl || null,

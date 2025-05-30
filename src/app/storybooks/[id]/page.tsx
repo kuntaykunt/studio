@@ -122,7 +122,7 @@ export default function ViewStorybookPage() {
           <h3 className="text-xl font-semibold mb-2 text-foreground/80">Original Prompt:</h3>
           <p className="text-sm p-3 bg-muted/50 rounded-md border mb-4 whitespace-pre-wrap">{storybook.originalPrompt}</p>
           
-          <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text</h2>
+          <h2 className="text-2xl font-semibold mb-4 text-foreground/90">Full Story Text (Rewritten)</h2>
           <pre className="whitespace-pre-wrap font-sans text-base p-4 bg-muted rounded-md max-h-[400px] overflow-y-auto border">
             {storybook.rewrittenStoryText || "No full story text available."}
           </pre>
@@ -142,10 +142,16 @@ export default function ViewStorybookPage() {
               </CardHeader>
               <CardContent className="p-6 grid md:grid-cols-2 gap-6 items-start">
                 <div>
-                  <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text:</h3>
+                  <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text (Original):</h3>
                   <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
+                  {page.transformedDialogue && (
+                    <details className="mt-3 text-sm">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Dialogue Script for Voiceover</summary>
+                        <pre className="mt-1 p-2 bg-muted/50 rounded-md whitespace-pre-wrap border text-xs text-foreground/70 max-h-48 overflow-y-auto">{page.transformedDialogue}</pre>
+                    </details>
+                  )}
                 </div>
-                <div className="space-y-6"> {/* Increased spacing for better separation */}
+                <div className="space-y-6"> 
                   {page.imageUrl && (
                     <div>
                        <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
@@ -165,7 +171,7 @@ export default function ViewStorybookPage() {
                   {page.voiceoverUrl && (
                      <div>
                        <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
-                       {page.voiceoverUrl === PLACEHOLDER_VOICEOVER_URI ? (
+                       {(page.voiceoverUrl.includes(PLACEHOLDER_VOICEOVER_URI) || page.voiceoverUrl.includes('placeholder-audio-generation')) ? (
                          <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
                             <div className="flex items-center text-primary mb-1">
                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -176,14 +182,13 @@ export default function ViewStorybookPage() {
                             </p>
                          </div>
                        ) : (
-                         <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">
-                           Audio: {page.voiceoverUrl.substring(0,60)}...
-                           {/* In a real scenario, you'd embed an audio player here */}
-                         </div>
+                         <audio controls src={page.voiceoverUrl} className="w-full h-10 mt-1">
+                            Your browser does not support the audio element.
+                         </audio>
                        )}
                     </div>
                   )}
-                   {page.animationUrl && page.imageUrl && ( // Only show animation if there's an image
+                   {page.animationUrl && page.imageUrl && ( 
                     <div>
                        <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
                        {page.animationUrl === PLACEHOLDER_ANIMATION_URI ? (
@@ -200,7 +205,6 @@ export default function ViewStorybookPage() {
                          <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
                              <Film className="h-12 w-12" />
                              <span className="ml-2">Animation Content</span> 
-                             {/* In a real scenario, you'd embed a video/gif player here */}
                          </div>
                        )}
                     </div>
@@ -227,4 +231,3 @@ export default function ViewStorybookPage() {
     </div>
   );
 }
-
