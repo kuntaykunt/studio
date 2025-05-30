@@ -11,14 +11,14 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const DialogueTransformationInputSchema = z.object({
+const DialogueTransformationInputSchema = z.object({
   storyPageText: z.string().describe('The original text content of the story page.'),
   childAge: z.number().describe('The age of the child for whom the story is intended.'),
   // Potentially add characterName if we want to pass it explicitly in the future
 });
 export type DialogueTransformationInput = z.infer<typeof DialogueTransformationInputSchema>;
 
-export const DialogueTransformationOutputSchema = z.object({
+const DialogueTransformationOutputSchema = z.object({
   dialogueText: z
     .string()
     .describe('The story page text rewritten as a dialogue between Narrator and Character.'),
@@ -82,3 +82,4 @@ const dialogueTransformationFlow = ai.defineFlow(
     return output;
   }
 );
+
