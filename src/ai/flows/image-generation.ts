@@ -4,6 +4,7 @@
 /**
  * @fileOverview Generates images for each page of a children's story,
  * attempting to use the previous page's image as context for consistency.
+ * The initial visual style description is applied only to the first image.
  *
  * - generateStoryImages - A function that generates images for each page of a story.
  * - GenerateStoryImagesInput - The input type for the generateStoryImages function.
@@ -20,7 +21,7 @@ const GenerateStoryImagesInputSchema = z.object({
     })
   ).describe('An array of story pages, each containing the text for that page.'),
   childAge: z.number().describe('The age of the child for whom the story is intended.'),
-  storyStyleDescription: z.string().optional().describe('An optional description of the desired overall art style or main character appearance to maintain consistency across pages.'),
+  storyStyleDescription: z.string().optional().describe('An optional description of the desired overall art style or main character appearance to maintain consistency across pages. This is primarily used for the first image.'),
 });
 export type GenerateStoryImagesInput = z.infer<typeof GenerateStoryImagesInputSchema>;
 
@@ -43,7 +44,7 @@ const pageImageMatchCheckPrompt = ai.definePrompt({
     schema: z.object({
       pageText: z.string(),
       childAge: z.number(),
-      storyStyleDescription: z.string().optional(),
+      storyStyleDescription: z.string().optional(), // Style description is still relevant for checking appropriateness
     }),
   },
   output: {
@@ -98,23 +99,19 @@ const generateStoryImagesFlow = ai.defineFlow(
         const commonInstructions = `IMPORTANT: The image must be a scene illustration only and contain NO text, letters, or words. It should be appealing to a ${input.childAge}-year-old child.`;
 
         if (i === 0 || !previousImageUrl) {
-          // First image or previous image generation failed
+          // First image or previous image generation failed (so we treat current as a new first image)
           if (input.storyStyleDescription && input.storyStyleDescription.trim() !== '') {
             imageGenPromptConfig = `${input.storyStyleDescription}. Create a children's storybook illustration depicting the following scene: "${page.pageText}". ${commonInstructions}`;
           } else {
-            // AI Default style
+            // AI Default style for the very first image
             imageGenPromptConfig = `Create a children's storybook illustration depicting the following scene: "${page.pageText}". The style should be colorful and whimsical. ${commonInstructions}`;
           }
           console.log(`[generateStoryImagesFlow] Page ${i + 1} (New Image) - Image Gen Prompt (first 200 chars): "${(imageGenPromptConfig as string).substring(0,200)}..."`);
         } else {
           // Subsequent images, using previousImageUrl as context
-          let contextualPromptText: string;
-          if (input.storyStyleDescription && input.storyStyleDescription.trim() !== '') {
-            contextualPromptText = `${input.storyStyleDescription}. Using the previous image as a reference, continue the story by illustrating this scene: "${page.pageText}". Maintain visual consistency. ${commonInstructions}`;
-          } else {
-            // AI Default style for contextual image
-            contextualPromptText = `Using the previous image as a reference, continue the story by illustrating this scene: "${page.pageText}". Maintain a colorful and whimsical style, consistent with the previous image. ${commonInstructions}`;
-          }
+          // The storyStyleDescription is NOT re-applied here; style is inferred from previousImageUrl.
+          const contextualPromptText = `Using the previous image as a reference, continue the story by illustrating this scene: "${page.pageText}". Maintain visual consistency with the provided image and its style. ${commonInstructions}`;
+          
           imageGenPromptConfig = [
             { media: { url: previousImageUrl } },
             { text: contextualPromptText }
@@ -144,13 +141,14 @@ const generateStoryImagesFlow = ai.defineFlow(
           if (genError) {
             console.error(`[generateStoryImagesFlow] Page ${i + 1} - Image generation error from ai.generate:`, JSON.stringify(genError, null, 2));
           }
+
           if (media?.url && typeof media.url === 'string' && media.url.startsWith('data:image')) {
             generatedImageUrl = media.url;
-            previousImageUrl = generatedImageUrl;
+            previousImageUrl = generatedImageUrl; // Set for the next iteration
             console.log(`[generateStoryImagesFlow] Page ${i + 1} - Generated image URL (first 100 chars): ${generatedImageUrl.substring(0,100)}...`);
           } else {
             console.warn(`[generateStoryImagesFlow] Page ${i + 1} - No valid media.url received or it's not a string/image. Media object:`, media);
-            previousImageUrl = undefined; // Reset if current image gen failed
+            previousImageUrl = undefined; // Reset if current image gen failed to avoid passing bad context
           }
         } catch (imageGenError: any) {
           let errorMsg = 'Unknown error during single image generation.';
@@ -162,8 +160,9 @@ const generateStoryImagesFlow = ai.defineFlow(
         }
 
         let imageMatchesTextResult = false;
-        if (generatedImageUrl) {
+        if (generatedImageUrl) { // Only check if an image was successfully generated
             try {
+                // The storyStyleDescription is still relevant for the match check, as it defines the user's overall intent.
                 const {output: matchOutput, error: matchCheckGenError} = await pageImageMatchCheckPrompt({
                     pageText: page.pageText,
                     childAge: input.childAge,
@@ -211,6 +210,7 @@ const generateStoryImagesFlow = ai.defineFlow(
       }
       console.error(`[generateStoryImagesFlow] CRITICAL UNHANDLED ERROR IN FLOW: ${errorMessage}`, flowError instanceof Error ? flowError.stack : 'No stack available. Raw error object:', flowError);
       
+      // Return an array of failures matching the output schema
       return input.storyPages.map(page => ({
         pageText: page.pageText,
         imageUrl: undefined,
