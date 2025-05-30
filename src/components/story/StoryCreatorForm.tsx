@@ -6,10 +6,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { StoryCreationFormData, storyCreationSchema, StoryPage, Storybook } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+// import { Textarea } from '@/components/ui/textarea'; // No longer using Textarea for style
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Added Select
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from '@/contexts/AuthContext';
 import { addStorybook } from '@/lib/firebase/firestoreService';
 import { useRouter } from 'next/navigation';
+import { visualStyleOptions } from '@/lib/visualStyles'; // Import predefined styles
 
 type GenerationStep = 'initial' | 'storyGenerated' | 'imagesGenerated' | 'voiceoversGenerated' | 'animationsGenerated' | 'saved';
 
@@ -45,39 +47,35 @@ function splitStoryIntoPagesBasedOnCharLimit(fullStory: string, childAge: number
     }
 
     let splitPoint = -1;
-    // Prefer splitting at double newlines (paragraph breaks)
     for (let i = Math.min(charLimit, currentStorySegment.length -1) ; i > 0; i--) {
       if (currentStorySegment[i] === '\n' && i > 0 && currentStorySegment[i-1] === '\n') {
-        splitPoint = i + 1; // Keep the newline as part of the previous page or ensure it's not the start of the next
+        splitPoint = i + 1; 
         break;
       }
     }
-     // If no double newline, try sentence endings
     if (splitPoint === -1) {
       for (let i = Math.min(charLimit, currentStorySegment.length -1); i > 0; i--) {
         if (['.', '!', '?'].includes(currentStorySegment[i]) && (i + 1 < currentStorySegment.length && currentStorySegment[i+1] === ' ')) {
-          splitPoint = i + 2; // Split after the space following sentence end
+          splitPoint = i + 2; 
           break;
         }
       }
     }
-    // If still no good split point, try the last space within the limit
     if (splitPoint === -1) {
       splitPoint = currentStorySegment.lastIndexOf(' ', charLimit);
     }
-    // If no space found (very long word or no spaces), force split at charLimit
     if (splitPoint === -1 || splitPoint === 0) {
       splitPoint = charLimit;
     }
 
     let pageText = currentStorySegment.substring(0, splitPoint).trim();
-    if (pageText.length > 0) { // Ensure no empty pages are added
+    if (pageText.length > 0) { 
         pages.push(pageText);
     }
     currentStorySegment = currentStorySegment.substring(splitPoint).trimStart();
   }
 
-  return pages.filter(p => p.length > 0); // Final filter for any empty pages due to trimming logic
+  return pages.filter(p => p.length > 0); 
 }
 
 
@@ -102,7 +100,7 @@ export default function StoryCreatorForm() {
       storyPrompt: '',
       childAge: 5,
       voiceGender: 'female',
-      storyStyleDescription: '',
+      storyStyleDescription: visualStyleOptions[0].description, // Default to "AI Default" description
     },
   });
 
@@ -179,7 +177,7 @@ export default function StoryCreatorForm() {
         childAge: form.getValues('childAge'),
         storyStyleDescription: form.getValues('storyStyleDescription'),
       };
-      toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s).` });
+      toast({ title: "Generating images...", description: `Our AI artists are drawing pictures for ${pagesText.length} page(s). This may take a moment.` });
 
       const results = await generateStoryImages(input);
       setOverallProgress(50);
@@ -199,8 +197,8 @@ export default function StoryCreatorForm() {
     } catch (error) {
       console.error("Error generating images:", error);
       toast({ variant: "destructive", title: "Error Generating Images", description: (error as Error).message || "Failed to generate all images." });
-      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); // Mark all as not loading
-      setOverallProgress(25); // Revert progress
+      setStoryPages(initialPages.map(p => ({ ...p, isLoadingImage: false }))); 
+      setOverallProgress(25); 
     } finally {
       setIsLoading(false);
     }
@@ -211,11 +209,11 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(55);
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingVoiceover: true })));
-    toast({ title: "Generating Voiceovers...", description: "AI is preparing voiceovers for each page." });
+    toast({ title: "Generating Voiceovers...", description: "AI is preparing voiceovers for each page. This can take some time." });
 
     const voiceoverPromises = storyPages.map(async (page) => {
       const input: GenerateVoiceoverInput = {
-        storyText: page.text, // Original page text for dialogue transformation
+        storyText: page.text, 
         voiceGender: form.getValues('voiceGender'),
         childAge: form.getValues('childAge'),
       };
@@ -224,7 +222,7 @@ export default function StoryCreatorForm() {
         return { ...page, voiceoverUrl: result.audioDataUri, transformedDialogue: result.transformedDialogue, isLoadingVoiceover: false };
       } catch (voiceError) {
         console.error(`Error generating voiceover for page ${page.pageNumber}:`, voiceError);
-        return { ...page, isLoadingVoiceover: false, voiceoverUrl: undefined, transformedDialogue: `Narrator: ${page.text}` }; // Fallback dialogue
+        return { ...page, isLoadingVoiceover: false, voiceoverUrl: undefined, transformedDialogue: `Narrator: ${page.text}` }; 
       }
     });
 
@@ -249,20 +247,18 @@ export default function StoryCreatorForm() {
     setIsLoading(true);
     setOverallProgress(80);
     setStoryPages(prevPages => prevPages.map(p => ({ ...p, isLoadingAnimation: true })));
-    toast({ title: "Preparing Animations...", description: "Animation placeholders are being set up." });
+    toast({ title: "Preparing Animations...", description: "Animation placeholders are being set up. This is a feature in development." });
 
     const animationPromises = storyPages.map(async (page) => {
       if (!page.imageUrl) {
-        // No image, so no animation can be based on it.
         return { ...page, isLoadingAnimation: false, animationUrl: undefined };
       }
       const input: GenerateAnimationInput = {
-        imageDataUri: page.imageUrl, // This is required
+        imageDataUri: page.imageUrl, 
         storyText: page.text,
         childAge: form.getValues('childAge'),
       };
       try {
-        // This flow currently returns a placeholder.
         const result = await generateAnimation(input);
         return { ...page, animationUrl: result.animationDataUri, isLoadingAnimation: false };
       } catch (animError) {
@@ -331,7 +327,13 @@ export default function StoryCreatorForm() {
   }
 
   const resetFormAndState = () => {
-    form.reset();
+    form.reset({
+        title: '',
+        storyPrompt: '',
+        childAge: 5,
+        voiceGender: 'female',
+        storyStyleDescription: visualStyleOptions[0].description, // Reset to default style
+    });
     setRewrittenStory(null);
     setStoryPages([]);
     setCurrentStep('initial');
@@ -440,11 +442,19 @@ export default function StoryCreatorForm() {
                              </div>
                            </div>
                         )}
-                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && <p className="text-sm text-muted-foreground mt-2">No animation placeholder set.</p>}
+                         {!page.animationUrl && !page.isLoadingAnimation && page.imageUrl && (
+                            <div className="mt-2">
+                                <p className="text-sm font-medium flex items-center gap-1"><Film className="h-4 w-4"/> Animation:</p>
+                                <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex flex-col items-center justify-center text-muted-foreground border p-2">
+                                  <Film className="h-10 w-10 mb-1" /> 
+                                  <span className="text-xs text-center">Animation feature in development. Placeholder was not set.</span>
+                                </div>
+                            </div>
+                         )}
                       </>
                     )}
                     {!page.imageUrl && currentStep === 'animationsGenerated' && (
-                         <p className="text-sm text-muted-foreground mt-2"><Film className="inline h-4 w-4 mr-1"/>Animation skipped (no image).</p>
+                         <p className="text-sm text-muted-foreground mt-2"><Film className="inline h-4 w-4 mr-1"/>Animation skipped (no image for this page).</p>
                     )}
                   </Card>
                 ))}
@@ -511,19 +521,36 @@ export default function StoryCreatorForm() {
                 <FormItem><FormLabel htmlFor="title" className="text-lg font-semibold">Story Title</FormLabel><FormControl><Input id="title" placeholder="e.g., The Brave Little Knight" className="text-base" {...field} /></FormControl><FormDescription>Give your story a catchy title!</FormDescription><FormMessage /></FormItem>
             )}/>
             <FormField control={form.control} name="storyPrompt" render={({ field }) => (
-                <FormItem><FormLabel htmlFor="storyPrompt" className="text-lg font-semibold">Your Story Idea</FormLabel><FormControl><Textarea id="storyPrompt" placeholder="Describe scenes or events. AI will rewrite and split into pages." rows={6} className="text-base" {...field} /></FormControl><FormDescription>AI will rewrite for child-safety and page division.</FormDescription><FormMessage /></FormItem>
+                <FormItem><FormLabel htmlFor="storyPrompt" className="text-lg font-semibold">Your Story Idea</FormLabel><FormControl><Input id="storyPrompt" placeholder="Describe scenes or events. AI will rewrite and split into pages." className="text-base h-24" {...field} as="textarea" /></FormControl><FormDescription>AI will rewrite for child-safety and page division.</FormDescription><FormMessage /></FormItem>
             )}/>
-             <FormField control={form.control} name="storyStyleDescription" render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor="storyStyleDescription" className="text-lg font-semibold flex items-center gap-2">
-                    <Palette className="h-5 w-5 text-muted-foreground"/>
-                    Visual Style (Optional)
-                  </FormLabel>
-                  <FormControl><Textarea id="storyStyleDescription" placeholder="e.g., 'Cute cartoon style, main character is a small brown bear with a blue hat' or 'Impressionistic watercolor paintings of magical forests'" rows={3} className="text-base" {...field} /></FormControl>
-                  <FormDescription>Describe the desired art style or main character to help maintain image consistency.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-            )}/>
+             <FormField
+                control={form.control}
+                name="storyStyleDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="storyStyleDescription" className="text-lg font-semibold flex items-center gap-2">
+                      <Palette className="h-5 w-5 text-muted-foreground"/>
+                      Visual Style
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="text-base">
+                          <SelectValue placeholder="Select a visual style" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {visualStyleOptions.map((style) => (
+                          <SelectItem key={style.id} value={style.description} className="text-base">
+                            {style.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Choose a visual style to guide image generation, or select AI Default.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField control={form.control} name="childAge" render={({ field }) => (
                   <FormItem><FormLabel htmlFor="childAge" className="text-lg font-semibold">Child&apos;s Age</FormLabel><FormControl><Input id="childAge" type="number" min="1" max="12" className="text-base" {...field} onChange={(e) => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl><FormDescription>Tailors complexity, page length, themes.</FormDescription><FormMessage /></FormItem>
@@ -551,4 +578,3 @@ export default function StoryCreatorForm() {
     </Form>
   );
 }
-
