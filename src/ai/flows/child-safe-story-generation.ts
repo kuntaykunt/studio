@@ -74,8 +74,16 @@ const childSafeStoryGenerationFlow = ai.defineFlow(
     inputSchema: ChildSafeStoryGenerationInputSchema,
     outputSchema: ChildSafeStoryGenerationOutputSchema,
   },
-  async input => {
+  async (input: ChildSafeStoryGenerationInput): Promise<ChildSafeStoryGenerationOutput> => {
     const {output} = await prompt(input);
-    return output!;
+    if (!output || typeof output.rewrittenStory !== 'string') {
+      console.error(
+        'Child-safe story generation prompt did not return the expected output format.',
+        'Received output:', output
+      );
+      // Return a fallback response that matches the schema
+      return { rewrittenStory: "Error: AI could not generate the story at this time. Please try adjusting your prompt or try again later." };
+    }
+    return output;
   }
 );
