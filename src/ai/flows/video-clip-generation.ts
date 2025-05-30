@@ -37,20 +37,24 @@ const generateVideoClipPrompt = ai.definePrompt({
   output: {schema: GenerateVideoClipOutputSchema},
   prompt: `You are a video generation expert specializing in creating short, animated video clips for children's stories.
 
-You will receive an image and the corresponding text for a page in a children's story. Your task is to create a short video clip based on the image and text. The video should be appropriate for the specified child's age.
+You will receive an image and the corresponding text for a page in a children's story. Your task is to create a short video clip based on the image and text.
 
-Voice Gender: {{{voiceGender}}}
-Child Age: {{{childAge}}}
-Story Text: {{{storyText}}}
-Image: {{media url=imageDataUri}}
+Input Details:
+- Story Text: {{{storyText}}}
+- Image: {{media url=imageDataUri}}
 
-Output Requirements:
-- The video should be a data URI.
-- The video should include a voiceover reading the story text with the specified gender.
-- The video should be visually engaging and appropriate for young children.
-- The video should not contain any inappropriate or unsafe content.
+Voiceover Requirements:
+- The voiceover should use a clear, friendly, and engaging {{{voiceGender}}} voice.
+- The voice style and pacing should be perfectly suited for a child aged {{{childAge}}}.
+- Ensure narration is easy for a young child to follow, with warm intonation and playful energy where appropriate to the text.
 
-Create a video clip based on the above information. Return the video data URI.
+Video Output Requirements:
+- The output should be a video data URI.
+- The video should include the specified voiceover reading the story text.
+- The video should be visually engaging, animating the provided image in a way that complements the story text and is delightful for young children.
+- The video must not contain any inappropriate or unsafe content.
+
+Based on the image and story text, create an animated video clip with the described voiceover. Return the video as a data URI.
 `,
 });
 
@@ -61,20 +65,13 @@ const generateVideoClipFlow = ai.defineFlow(
     outputSchema: GenerateVideoClipOutputSchema,
   },
   async input => {
-    //const result = await ai.generate({
-    //  prompt: input.storyText,
-    //  model: 'googleai/gemini-2.0-flash-exp',
-    //  config: {
-    //    responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE, IMAGE only won't work
-    //  },
-    //});
-    //console.log(media.url);
+    // const {output} = await generateVideoClipPrompt(input); // This would be the call if the model supported direct video/audio generation.
+    // return output!;
 
-    // For now, since video generation isn't directly supported, we'll return a placeholder.
+    // For now, since actual video and multi-modal (image + text input -> video with audio output) generation
+    // isn't directly implemented/supported with the current basic Genkit setup, we'll return a placeholder.
+    // Future development would involve configuring appropriate Genkit models (like Gemini 1.5 Pro with video/audio capabilities, or specific TTS/animation models)
+    // and updating this flow to call them. The prompt above is structured to guide such a model.
     return {videoDataUri: 'data:video/mp4;base64,placeholder-video-data'}; // Placeholder
-
-    // Once video generation is supported, the code would look something like this:
-    // const { videoDataUri } = await generateVideoClipPrompt(input);
-    // return { videoDataUri };
   }
 );
