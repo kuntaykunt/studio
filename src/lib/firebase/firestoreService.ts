@@ -1,5 +1,5 @@
 
-'use server'; // For potential use in Server Actions later, though primarily client-side for now
+'use server'; 
 
 import { db } from '@/lib/firebase/config';
 import type { Storybook, StoryPage } from '@/lib/types';
@@ -15,8 +15,8 @@ import {
   serverTimestamp,
   Timestamp,
   orderBy,
-  limit,
-  startAfter,
+  // limit, // Not used currently but good for pagination
+  // startAfter, // Not used currently
   DocumentData,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
@@ -36,32 +36,38 @@ import {
  *     allow read, write, delete: if request.auth != null && request.auth.uid == resource.data.userId;
  *     // Allow create if the userId in the new document will be the authenticated user's UID
  *     allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+ *     // Validate data types and structure
+ *     allow create, update: if request.resource.data.title is string &&
+ *                           request.resource.data.childAge is number &&
+ *                           request.resource.data.pages is list;
+ *     // Add more specific validation for page fields if needed
  *   }
  * }
- *
- * Also consider validating data types and required fields in your security rules.
- * For image data URIs (pages.*.imageUrl): These can be very large.
- * Consider moving to Firebase Storage and storing URLs instead for scalability.
  */
 
 const STORYBOOKS_COLLECTION = 'storybooks';
 
 // Helper to convert Firestore doc data to Storybook type
 const fromFirestore = (docSnap: QueryDocumentSnapshot<DocumentData> | DocumentData): Storybook => {
-  const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap; // Handle both snapshot and direct data
+  const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap;
   return {
-    id: typeof docSnap.id === 'string' ? docSnap.id : '', // Ensure id is present if it's a snapshot
+    id: typeof (docSnap as QueryDocumentSnapshot).id === 'string' ? (docSnap as QueryDocumentSnapshot).id : '',
     userId: data.userId,
     title: data.title,
     originalPrompt: data.originalPrompt,
     childAge: data.childAge,
     voiceGender: data.voiceGender,
     rewrittenStoryText: data.rewrittenStoryText,
-    pages: data.pages.map((page: any) => ({ // Explicitly type page to avoid implicit any
-      ...page,
-      // No date conversion needed for page sub-objects unless they contain Timestamps
+    pages: (data.pages || []).map((page: any) => ({ 
+      pageNumber: page.pageNumber,
+      text: page.text,
+      imageUrl: page.imageUrl,
+      imageMatchesText: page.imageMatchesText,
+      voiceoverUrl: page.voiceoverUrl, // Added
+      animationUrl: page.animationUrl, // Added
+      dataAiHint: page.dataAiHint,
     })) as StoryPage[],
-    createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate() : new Date(data.createdAt), // Handle both Timestamp and already converted dates
+    createdAt: (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate() : new Date(data.createdAt as string | number | Date),
   } as Storybook;
 };
 
@@ -76,6 +82,15 @@ export async function addStorybook(
   try {
     const docRef = await addDoc(collection(db, STORYBOOKS_COLLECTION), {
       ...storybookData,
+      pages: storybookData.pages.map(p => ({ // ensure all fields are explicitly set or undefined
+        pageNumber: p.pageNumber,
+        text: p.text,
+        imageUrl: p.imageUrl || null,
+        imageMatchesText: p.imageMatchesText || false,
+        voiceoverUrl: p.voiceoverUrl || null,
+        animationUrl: p.animationUrl || null,
+        dataAiHint: p.dataAiHint || null,
+      })),
       userId: userId,
       createdAt: serverTimestamp(),
     });
@@ -115,12 +130,11 @@ export async function getStorybookById(storybookId: string, userId: string): Pro
 
     if (docSnap.exists()) {
       const storybook = fromFirestore(docSnap);
-      // Verify ownership
       if (storybook.userId === userId) {
         return storybook;
       } else {
         console.warn(`User ${userId} attempted to access storybook ${storybookId} owned by ${storybook.userId}`);
-        return null; // Or throw an explicit "access denied" error
+        return null; 
       }
     } else {
       return null;
@@ -136,8 +150,6 @@ export async function deleteStorybook(storybookId: string, userId: string): Prom
     throw new Error('User must be authenticated to delete a storybook.');
   }
   try {
-    // Optional: Fetch the document first to verify ownership before deleting,
-    // though security rules should be the primary enforcer.
     const storybookDoc = await getStorybookById(storybookId, userId);
     if (!storybookDoc) {
         console.warn(`Storybook ${storybookId} not found or user ${userId} does not have permission to delete.`);
@@ -147,7 +159,6 @@ export async function deleteStorybook(storybookId: string, userId: string): Prom
     await deleteDoc(doc(db, STORYBOOKS_COLLECTION, storybookId));
   } catch (error) {
     console.error('Error deleting storybook from Firestore:', error);
-    // Don't rethrow "Storybook not found or permission denied." if it was already handled.
     if (error instanceof Error && error.message.startsWith("Storybook not found")) {
         throw error;
     }

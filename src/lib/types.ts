@@ -6,16 +6,18 @@ export interface StoryPage {
   text: string;
   imageUrl?: string;
   imageMatchesText?: boolean;
-  videoUrl?: string; // Placeholder for video data URI or URL
+  voiceoverUrl?: string; // Placeholder for voiceover audio data URI or URL
+  animationUrl?: string; // Placeholder for animation data URI or URL
   isLoadingImage?: boolean;
-  isLoadingVideo?: boolean;
+  isLoadingVoiceover?: boolean;
+  isLoadingAnimation?: boolean;
   dataAiHint?: string; // For individual page images
 }
 
 export interface Storybook {
   id: string; // Firestore document ID
   userId: string; // Firebase Auth User UID
-  title: string; 
+  title: string;
   originalPrompt: string;
   childAge: number;
   voiceGender: 'male' | 'female';

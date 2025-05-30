@@ -7,14 +7,16 @@ import type { Storybook } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { ArrowLeft, BookOpen, Users, Video, AlertTriangle, Loader2, ShieldAlert, Info } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, AlertTriangle, Loader2, ShieldAlert, Mic, Film } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStorybookById } from '@/lib/firebase/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
 
-const PLACEHOLDER_VIDEO_URI = 'data:video/mp4;base64,placeholder-video-data';
+const PLACEHOLDER_VOICEOVER_URI = 'data:audio/wav;base64,placeholder-audio-data';
+const PLACEHOLDER_ANIMATION_URI = 'data:image/gif;base64,placeholder-animation-data';
+
 
 export default function ViewStorybookPage() {
   const router = useRouter();
@@ -89,7 +91,7 @@ export default function ViewStorybookPage() {
         <BookOpen className="mx-auto h-24 w-24 text-destructive mb-6" />
         <h1 className="text-4xl font-bold mb-4">Storybook Not Found</h1>
         <p className="text-xl text-muted-foreground mb-8">
-          Oops! We couldn&apos;t find the storybook you&apos;re looking for, or you don&apos;t have permission to view it.
+          Oops! We couldn&apos;t find the storybook you&apos;re looking for.
         </p>
         <Button asChild>
           <Link href="/storybooks">
@@ -143,7 +145,7 @@ export default function ViewStorybookPage() {
                   <h3 className="text-lg font-semibold mb-2 text-foreground/80">Page Text:</h3>
                   <p className="text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">{page.text}</p>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-6"> {/* Increased spacing for better separation */}
                   {page.imageUrl && (
                     <div>
                        <h3 className="text-lg font-semibold mb-2 text-foreground/80">Illustration:</h3>
@@ -160,24 +162,45 @@ export default function ViewStorybookPage() {
                       )}
                     </div>
                   )}
-                  {page.videoUrl && (
-                    <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video & Voiceover:</h3>
-                       {page.videoUrl === PLACEHOLDER_VIDEO_URI ? (
-                         <div className="flex flex-col items-start p-4 border rounded-lg bg-muted/50 text-sm">
-                            <div className="flex items-center text-primary mb-2">
-                               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                               <span>Processing video and voiceover...</span>
+                  {page.voiceoverUrl && (
+                     <div>
+                       <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Mic className="h-5 w-5" /> Voiceover:</h3>
+                       {page.voiceoverUrl === PLACEHOLDER_VOICEOVER_URI ? (
+                         <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                            <div className="flex items-center text-primary mb-1">
+                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                               <span>Processing voiceover...</span>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                We'll notify you when it's ready! (Actual video/voice generation is a feature in development)
+                                We&apos;ll notify you when it&apos;s ready! (Actual voice generation is a feature in development)
+                            </p>
+                         </div>
+                       ) : (
+                         <div className="w-full p-2 bg-foreground/5 rounded-md text-muted-foreground border text-xs">
+                           Audio: {page.voiceoverUrl.substring(0,60)}...
+                           {/* In a real scenario, you'd embed an audio player here */}
+                         </div>
+                       )}
+                    </div>
+                  )}
+                   {page.animationUrl && page.imageUrl && ( // Only show animation if there's an image
+                    <div>
+                       <h3 className="text-lg font-semibold mb-2 text-foreground/80 flex items-center gap-1"><Film className="h-5 w-5"/> Animation:</h3>
+                       {page.animationUrl === PLACEHOLDER_ANIMATION_URI ? (
+                         <div className="flex flex-col items-start p-3 border rounded-lg bg-muted/50 text-sm">
+                            <div className="flex items-center text-primary mb-1">
+                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                               <span>Processing animation...</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                We&apos;ll notify you when it&apos;s ready! (Actual animation generation is a feature in development)
                             </p>
                          </div>
                        ) : (
                          <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
-                             <Video className="h-12 w-12" />
-                             {/* In a real scenario, you'd embed a video player here if videoUrl was a real URL */}
-                             <span className="ml-2">Video Content</span> 
+                             <Film className="h-12 w-12" />
+                             <span className="ml-2">Animation Content</span> 
+                             {/* In a real scenario, you'd embed a video/gif player here */}
                          </div>
                        )}
                     </div>

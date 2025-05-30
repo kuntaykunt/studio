@@ -1,6 +1,8 @@
+
 'use server';
 /**
  * @fileOverview Video clip generation flow for creating short animated video clips with voiceover.
+ * THIS FILE IS NOW DEPRECATED. Use animation-generation.ts and voice-generation.ts instead.
  *
  * - generateVideoClip - A function that generates a video clip for a given image and text.
  * - GenerateVideoClipInput - The input type for the generateVideoClip function.
@@ -28,14 +30,19 @@ const GenerateVideoClipOutputSchema = z.object({
 export type GenerateVideoClipOutput = z.infer<typeof GenerateVideoClipOutputSchema>;
 
 export async function generateVideoClip(input: GenerateVideoClipInput): Promise<GenerateVideoClipOutput> {
-  return generateVideoClipFlow(input);
+  // This flow is deprecated. Logic has moved to animation-generation.ts and voice-generation.ts
+  console.warn("generateVideoClip flow is deprecated. Use generateAnimation and generateVoiceover instead.");
+  return Promise.resolve({videoDataUri: 'data:video/mp4;base64,deprecated-placeholder-video-data'});
 }
 
+// The rest of the file (prompt, flow definition) is effectively unused due to deprecation.
+// Keeping it for history but should be removed in a future cleanup if the file itself is deleted.
+
 const generateVideoClipPrompt = ai.definePrompt({
-  name: 'generateVideoClipPrompt',
+  name: 'generateVideoClipPrompt_DEPRECATED',
   input: {schema: GenerateVideoClipInputSchema},
   output: {schema: GenerateVideoClipOutputSchema},
-  prompt: `You are a video generation expert specializing in creating short, animated video clips for children's stories.
+  prompt: `DEPRECATED PROMPT: You are a video generation expert specializing in creating short, animated video clips for children's stories.
 
 You will receive an image and the corresponding text for a page in a children's story. Your task is to create a short video clip based on the image and text.
 
@@ -47,6 +54,7 @@ Voiceover Requirements:
 - The voiceover should use a clear, friendly, and engaging {{{voiceGender}}} voice.
 - The voice style and pacing should be perfectly suited for a child aged {{{childAge}}}.
 - Ensure narration is easy for a young child to follow, with warm intonation and playful energy where appropriate to the text.
+- Consider a warm, engaging tone for a {{{childAge}}}-year-old. For younger children (1-3), use simpler language, very expressive and slower-paced narration. For older children (7-12), the narration can be slightly more complex and faster-paced, but still clear and engaging.
 
 Video Output Requirements:
 - The output should be a video data URI.
@@ -60,18 +68,11 @@ Based on the image and story text, create an animated video clip with the descri
 
 const generateVideoClipFlow = ai.defineFlow(
   {
-    name: 'generateVideoClipFlow',
+    name: 'generateVideoClipFlow_DEPRECATED',
     inputSchema: GenerateVideoClipInputSchema,
     outputSchema: GenerateVideoClipOutputSchema,
   },
   async input => {
-    // const {output} = await generateVideoClipPrompt(input); // This would be the call if the model supported direct video/audio generation.
-    // return output!;
-
-    // For now, since actual video and multi-modal (image + text input -> video with audio output) generation
-    // isn't directly implemented/supported with the current basic Genkit setup, we'll return a placeholder.
-    // Future development would involve configuring appropriate Genkit models (like Gemini 1.5 Pro with video/audio capabilities, or specific TTS/animation models)
-    // and updating this flow to call them. The prompt above is structured to guide such a model.
-    return {videoDataUri: 'data:video/mp4;base64,placeholder-video-data'}; // Placeholder
+    return {videoDataUri: 'data:video/mp4;base64,deprecated-placeholder-video-data'}; // Placeholder
   }
 );
