@@ -17,7 +17,7 @@ const GenerateAnimationInputSchema = z.object({
     .describe(
       "The image data URI to animate, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
-  storyText: z.string().describe('The context of the story page text (optional, for video guidance).'),
+  storyText: z.string().describe('The context of the story page text to guide the animation of the image.'),
   childAge: z.number().describe('The age of the child for whom the video clip is intended.'),
 });
 export type GenerateAnimationInput = z.infer<typeof GenerateAnimationInputSchema>;
@@ -35,22 +35,24 @@ const animationGenerationPrompt = ai.definePrompt({
   name: 'animationGenerationPrompt',
   input: {schema: GenerateAnimationInputSchema},
   output: {schema: GenerateAnimationOutputSchema},
-  prompt: `You are a creative video generation expert specializing in producing short, engaging video clips for children's stories from static images and text.
+  prompt: `You are a creative video generation expert specializing in producing short, engaging video clips for children's stories by animating static images based on accompanying text.
 
-You will receive a static image and the corresponding story text for context. Your task is to create a short video clip based on the image, bringing it to life with subtle animations and movements that match the story text.
+You will receive a static image (via 'imageDataUri') and the corresponding story text for that page (via 'storyText').
+Your task is to generate a short video clip by bringing the provided STATIC IMAGE to life.
+The animation should be directly based on the elements visible in the image and guided by the 'storyText'. For example, if the story text says "the sun was shining," and the image shows a sun, you might make the sun's rays gently twinkle. If the text says "the character smiled," and the image shows a character, you might animate a subtle smile.
 
-Input Details:
-- Image: {{media url=imageDataUri}}
-- Story Context: {{{storyText}}}
+Input Image: {{media url=imageDataUri}}
+Story Context for Animation Guidance: {{{storyText}}}
 
 Video Clip Requirements:
+- The animation must be applied to the provided input image.
 - The video clip should be very short (e.g., 3-5 seconds).
 - Style: Visually appealing, colorful, and engaging for a child aged {{{childAge}}}.
-- Animation: Incorporate simple animations like panning, zooming, character wiggles, blinking eyes, or environmental effects (e.g., sparkling stars, rustling leaves) that enhance the story page. The animation should directly relate to the provided image and story context.
+- Animation: Incorporate simple, subtle animations directly related to the content of the input image and the 'storyText'. Examples: panning, zooming, character wiggles, blinking eyes, sparkling effects on relevant objects, gentle environmental movements (e.g., rustling leaves if leaves are in the image and text implies wind).
 - The output should be a video data URI (e.g., MP4 or GIF format suitable for web).
 - The video must not contain any inappropriate or unsafe content. It should be a scene illustration only, without any added text overlays.
 
-Based on the image and story text, generate a short, child-friendly video clip. Return the video clip as a data URI.
+Based on the provided image and the story text, generate a short, child-friendly animated video clip. Return the video clip as a data URI.
 `,
   config: {
     safetySettings: [
