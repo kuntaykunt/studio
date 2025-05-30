@@ -14,6 +14,8 @@ import { getStorybookById } from '@/lib/firebase/firestoreService';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
 
+const PLACEHOLDER_VIDEO_URI = 'data:video/mp4;base64,placeholder-video-data';
+
 export default function ViewStorybookPage() {
   const router = useRouter();
   const params = useParams();
@@ -149,7 +151,7 @@ export default function ViewStorybookPage() {
                         src={page.imageUrl}
                         alt={`Illustration for page ${page.pageNumber}`}
                         width={400}
-                        height={300} // Adjusted height for better aspect ratio if images are typically landscape
+                        height={300}
                         className="rounded-lg border shadow-md object-cover"
                         data-ai-hint={page.dataAiHint || "story illustration"}
                       />
@@ -160,15 +162,23 @@ export default function ViewStorybookPage() {
                   )}
                   {page.videoUrl && (
                     <div>
-                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video Clip:</h3>
-                       <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
-                           <Video className="h-12 w-12" />
-                           <span className="ml-2">Video Placeholder</span>
-                       </div>
-                       {page.videoUrl.includes("placeholder-video-data") && (
-                        <p className="text-xs text-muted-foreground mt-1 flex items-center">
-                            <Info className="h-3 w-3 mr-1 shrink-0"/> Actual video generation is a feature in development. This is a placeholder.
-                        </p>
+                       <h3 className="text-lg font-semibold mb-2 text-foreground/80">Video & Voiceover:</h3>
+                       {page.videoUrl === PLACEHOLDER_VIDEO_URI ? (
+                         <div className="flex flex-col items-start p-4 border rounded-lg bg-muted/50 text-sm">
+                            <div className="flex items-center text-primary mb-2">
+                               <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                               <span>Processing video and voiceover...</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                We'll notify you when it's ready! (Actual video/voice generation is a feature in development)
+                            </p>
+                         </div>
+                       ) : (
+                         <div className="w-full max-w-xs aspect-video bg-foreground/10 rounded-md flex items-center justify-center text-muted-foreground border">
+                             <Video className="h-12 w-12" />
+                             {/* In a real scenario, you'd embed a video player here if videoUrl was a real URL */}
+                             <span className="ml-2">Video Content</span> 
+                         </div>
                        )}
                     </div>
                   )}
@@ -194,3 +204,4 @@ export default function ViewStorybookPage() {
     </div>
   );
 }
+
