@@ -1,15 +1,15 @@
 ```mermaid
 graph TD
-    subgraph "User Interaction Layer"
+    subgraph User_Interaction_Layer
         A[User (Browser)]
     end
 
-    subgraph "Presentation Layer (Next.js App - Firebase App Hosting)"
+    subgraph Presentation_Layer_NextJS_App_Firebase_App_Hosting
         B[Next.js App <br> (Pages, React Components, <br> ShadCN UI, Tailwind)]
         C[Next.js Server Actions <br> (API Layer)]
     end
 
-    subgraph "AI Processing Layer (Genkit - Server-Side)"
+    subgraph AI_Processing_Layer_Genkit_Server_Side
         D[Genkit AI Flows Executor]
         D1[Child-Safe Story Flow]
         D2[Dialogue Transformation Flow]
@@ -18,13 +18,13 @@ graph TD
         D5[Animation Generation Flow <br> (Placeholder)]
     end
 
-    subgraph "External AI Services (Google AI)"
+    subgraph External_AI_Services_Google_AI
         E1[Google AI (Gemini - Text Models)]
         E2[Google AI (Gemini - Image Models)]
         E3[Google AI (Gemini - TTS Models)]
     end
 
-    subgraph "Data & Authentication Layer (Firebase)"
+    subgraph Data_Authentication_Layer_Firebase
         F[Firebase Authentication]
         G[Firebase Firestore <br> (Storybook Data)]
     end
