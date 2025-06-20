@@ -1,4 +1,3 @@
-
 # StoryTime Studio - Application Overview
 
 Welcome to StoryTime Studio, an AI-powered application designed to help users create magical, personalized, and child-safe storybooks. This document provides an overview of the app's features, design principles, and the technologies used in its development.
@@ -159,4 +158,3 @@ The Genkit development server can be run separately if needed for flow developme
 ```
 npm run genkit:dev
 ```
-
