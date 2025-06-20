@@ -86,8 +86,8 @@ graph TD
     end
 
     subgraph "Presentation Layer (Next.js App - Firebase App Hosting)"
-        B[Next.js App <br/> (Pages, React Components, <br/> ShadCN UI, Tailwind)]
-        C[Next.js Server Actions <br/> (API Layer)]
+        B[Next.js App <br> (Pages, React Components, <br> ShadCN UI, Tailwind)]
+        C[Next.js Server Actions <br> (API Layer)]
     end
 
     subgraph "AI Processing Layer (Genkit - Server-Side)"
@@ -96,7 +96,7 @@ graph TD
         D2[Dialogue Transformation Flow]
         D3[Image Generation Flow]
         D4[Voice Generation Flow (TTS)]
-        D5[Animation Generation Flow <br/> (Placeholder)]
+        D5[Animation Generation Flow <br> (Placeholder)]
     end
 
     subgraph "External AI Services (Google AI)"
@@ -107,7 +107,7 @@ graph TD
 
     subgraph "Data & Authentication Layer (Firebase)"
         F[Firebase Authentication]
-        G[Firebase Firestore <br/> (Storybook Data)]
+        G[Firebase Firestore <br> (Storybook Data)]
     end
 
     %% Interactions
@@ -159,3 +159,4 @@ The Genkit development server can be run separately if needed for flow developme
 ```
 npm run genkit:dev
 ```
+
