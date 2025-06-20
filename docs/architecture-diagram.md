@@ -1,32 +1,32 @@
 ```mermaid
 graph TD
-    subgraph User_Interaction_Layer
-        A[User (Browser)]
+    subgraph UserLayer
+        A[User via Browser]
     end
 
-    subgraph Presentation_Layer_NextJS_App_Firebase_App_Hosting
+    subgraph PresentationLayer_NextJS_FirebaseAppHosting
         B[Next.js App <br> (Pages, React Components, <br> ShadCN UI, Tailwind)]
         C[Next.js Server Actions <br> (API Layer)]
     end
 
-    subgraph AI_Processing_Layer_Genkit_Server_Side
+    subgraph AI_Processing_Layer_Genkit_ServerSide
         D[Genkit AI Flows Executor]
-        D1[Child-Safe Story Flow]
+        D1[ChildSafe Story Flow]
         D2[Dialogue Transformation Flow]
         D3[Image Generation Flow]
-        D4[Voice Generation Flow (TTS)]
-        D5[Animation Generation Flow <br> (Placeholder)]
+        D4[Voice Generation Flow TTS]
+        D5[Animation Generation Flow <br> Placeholder]
     end
 
-    subgraph External_AI_Services_Google_AI
-        E1[Google AI (Gemini - Text Models)]
-        E2[Google AI (Gemini - Image Models)]
-        E3[Google AI (Gemini - TTS Models)]
+    subgraph External_AI_Services_GoogleAI
+        E1[Google AI Gemini Text Models]
+        E2[Google AI Gemini Image Models]
+        E3[Google AI Gemini TTS Models]
     end
 
     subgraph Data_Authentication_Layer_Firebase
         F[Firebase Authentication]
-        G[Firebase Firestore <br> (Storybook Data)]
+        G[Firebase Firestore <br> Storybook Data]
     end
 
     %% Interactions
@@ -34,7 +34,7 @@ graph TD
 
     B -- UI Events, Form Submissions --> C;
     B -- Data Fetching for Views --> G;
-    B -- Auth UI (Login/Signup Forms) --> F;
+    B -- Auth UI Login/Signup Forms --> F;
 
     C -- Calls AI Functionality --> D;
     C -- CRUD Operations --> G;
